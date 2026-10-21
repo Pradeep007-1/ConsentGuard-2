@@ -607,11 +607,7 @@ body::before {
     inset: 0 0 0 384px;
     pointer-events: none;
     z-index: 0;
-    background-image:
-        radial-gradient(circle, rgba(45, 212, 191, 0.8) 2px, transparent 3px),
-        linear-gradient(30deg, transparent 49.5%, rgba(56, 189, 248, 0.22) 50%, transparent 50.5%),
-        linear-gradient(150deg, transparent 49.5%, rgba(56, 189, 248, 0.22) 50%, transparent 50.5%);
-    background-size: 100px 100px, 100px 100px, 100px 100px;
+    
    
 }
 
@@ -641,6 +637,14 @@ body::before {
   font-size: 15px;
   line-height: 1.7;
 }
+
+
+
+
+
+
+
+
 
    </style> 
 </head>
@@ -929,6 +933,71 @@ loadAuditHistory();
   
 <div id="toast-message" class="toast-message" role="status" aria-live="polite" hidden></div>
   
+
+
+<canvas class="matrix-rain" id="matrixRain" aria-hidden="true"></canvas>
+<script>
+(() => {
+    const canvas = document.getElementById('matrixRain');
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    const chars = '01アイウエオカキクケコ';
+    let drops = [];
+    let width = 0;
+    let height = 0;
+    let frame = 0;
+
+    function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const columns = Math.ceil(width / 24);
+        drops = Array.from({ length: columns }, () =>
+            Math.random() * (height / 24)
+        );
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.font = '13px monospace';
+        ctx.fillStyle = '#32d6c2';
+
+        for (let i = 0; i < drops.length; i++) {
+            const char = chars[Math.floor(Math.random() * chars.length)];
+            const x = i * 24;
+            const y = drops[i] * 24;
+
+            ctx.globalAlpha = 0.35 + Math.random() * 0.35;
+            ctx.fillText(char, x, y);
+
+            if (y > height && Math.random() > 0.985) {
+                drops[i] = 0;
+            } else {
+                drops[i] += 0.28;
+            }
+        }
+
+        ctx.globalAlpha = 1;
+        frame = requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    draw();
+})();
+</script>
+
+
+
+
+
 </body>
 </html>
 
