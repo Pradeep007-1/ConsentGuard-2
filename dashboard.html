@@ -746,7 +746,36 @@ body::before {
 </ol>
 
     </div>
-
+<div class="card">
+    <h2>🛡️ Security Overview</h2>
+    <div class="summary-grid">
+        <div class="summary-card">
+            <h3>Total Access Requests</h3>
+            <p id="security-total">0</p>
+        </div>
+        <div class="summary-card">
+            <h3>Access Allowed</h3>
+            <p id="security-allowed">0</p>
+        </div>
+        <div class="summary-card">
+            <h3>Access Denied</h3>
+            <p id="security-denied">0</p>
+        </div>
+    </div>
+    <button onclick="loadSecurityOverview()">Refresh Security Stats</button>
+</div> 
+    <div class="card">
+    <h2>Data-Access Simulator</h2>
+    <p>Test whether access is allowed by your consent settings.</p>
+    <label for="sim-purpose">Select purpose:</label>
+    <select id="sim-purpose">
+        <option value="Analytics">Analytics</option>
+        <option value="Marketing">Marketing</option>
+        <option value="Third-Party Sharing">Third-Party Sharing</option>
+    </select>
+    <button onclick="simulateAccess()">Test Data Access</button>
+    <p id="sim-result">Waiting for test...</p>
+</div> 
     <script>
 
 
@@ -992,6 +1021,50 @@ loadAuditHistory();
     resize();
     draw();
 })();
+async function simulateAccess() {
+    const purpose = document.getElementById('sim-purpose').value;
+    const result = document.getElementById('sim-result');
+
+    result.textContent = 'Testing access...';
+
+    try {
+        const response = await fetch('http://127.0.0.1:5001/api/data-access', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: 'demo-user',
+                purpose: purpose
+            })
+        });
+
+        const data = await response.json();
+
+        result.textContent = response.ok
+            ? 'Access allowed'
+            : 'Access denied: consent required';
+    } catch (error) {
+        result.textContent = 'Backend is not running.';
+    }
+} 
+
+async function loadSecurityOverview() {
+    try {
+        const response = await fetch('http://127.0.0.1:5001/api/audit');
+        if (!response.ok) throw new Error('Audit API request failed: ' + response.status);
+const events = await response.json(); 
+
+        const allowed = events.filter(e => e.action === 'data_access_allowed').length;
+const denied = events.filter(e => e.action === 'data_access_denied').length; 
+        
+         document.getElementById('security-total').textContent = events.length; 
+        document.getElementById('security-allowed').textContent = allowed;
+        document.getElementById('security-denied').textContent = denied;
+    } catch (error) {
+        console.error('Could not load security statistics:', error);
+    }
+}
+
+loadSecurityOverview(); 
 </script>
 
 
