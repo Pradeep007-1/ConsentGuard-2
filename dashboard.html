@@ -1,0 +1,935 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ConsentGuard Dashboard</title>
+    <style>
+     
+/* CONSENTGUARD — Sidebar Dashboard */
+
+:root {
+    --navy: #12233f;
+    --navy-light: #1d3557;
+    --teal: #0f9b8e;
+    --teal-dark: #087f75;
+    --page: #f4f7fb;
+    --white: #ffffff;
+    --text: #182538;
+    --muted: #64748b;
+    --border: #e3eaf2;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+
+body {
+    margin: 0;
+    padding: 32px 36px 40px 410px;
+    max-width: none;
+   animation: bgShift 25s ease-in-out infinite; 
+
+}
+
+
+
+
+/* Sidebar: uses your existing header */
+header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 270px;
+    margin: 0;
+    padding: 38px 25px;
+    overflow-y: auto;
+    background: var(--navy);
+    color: var(--white);
+    border-radius: 0;
+    box-shadow: 5px 0 24px rgba(18, 35, 63, 0.10);
+    z-index: 10;
+}
+
+header h1 {
+    margin: 0 0 30px;
+    padding: 0;
+    color: var(--white);
+    font-size: 29px;
+    line-height: 1.25;
+    letter-spacing: -0.8px;
+    overflow-wrap: anywhere;
+}
+
+header p {
+    color: #cbd8e8;
+    font-size: 14px;
+    line-height: 1.8;
+    margin: 0 0 16px;
+}
+
+header p:last-child {
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid rgba(255,255,255,0.16);
+    color: #65ded0;
+    font-weight: 600;
+}
+
+/* Headings */
+h2 {
+    margin: 26px 0 8px;
+    color: var(--navy);
+    font-size: 25px;
+    line-height: 1.35;
+    letter-spacing: -0.5px;
+}
+
+h3 {
+    margin: 0 0 12px;
+    color: var(--navy);
+    font-size: 19px;
+}
+
+p {
+    color: #475569;
+}
+
+/* Overview summary panels */
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 16px;
+    margin: 0 0 18px;
+} 
+
+.summary-card {
+   flex: 1; 
+    min-width: 0;
+    padding: 20px 22px;
+    margin: 0;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 13px;
+    box-shadow: 0 4px 15px rgba(18, 35, 63, 0.035);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.summary-number {
+    color: var(--navy);
+    font-size: 31px;
+    font-weight: 750;
+    line-height: 1.25;
+}
+
+.summary-label {
+    color: var(--muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Consent purpose cards and history */
+.card {
+    margin: 18px 0;
+    padding: 25px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 5px 18px rgba(18, 35, 63, 0.035);
+    transition: border-color 0.18s ease,
+                box-shadow 0.18s ease,
+                transform 0.18s ease;
+}
+
+.card:hover {
+    border-color: #c6d9e4;
+    box-shadow: 0 9px 25px rgba(18, 35, 63, 0.07);
+    transform: translateY(-2px);
+}
+
+.card p {
+    margin: 10px 0 16px;
+}
+
+/* Status labels */
+.status {
+    display: block;
+    padding: 9px 12px;
+    margin: 14px 0;
+    border-radius: 8px;
+    font-weight: 650;
+    overflow-wrap: anywhere;
+    background: #eef2f7;
+    color: #334155;
+}
+
+.status-granted {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+.status-denied {
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+}
+
+.status-withdrawn {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+}
+
+/* Buttons */
+button {
+    display: inline-block;
+    padding: 10px 16px;
+    margin: 4px 5px 4px 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 650;
+    cursor: pointer;
+    transition: background 0.15s ease,
+                transform 0.15s ease,
+                box-shadow 0.15s ease;
+}
+
+button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(18, 35, 63, 0.12);
+}
+
+button:focus-visible {
+    outline: 3px solid #5eead4;
+    outline-offset: 3px;
+}
+
+button.grant {
+    background: var(--teal);
+    color: white;
+}
+
+button.grant:hover {
+    background: var(--teal-dark);
+}
+
+button.deny {
+    background: #fff1f2;
+    border-color: #fecdd3;
+    color: #be123c;
+}
+
+button.withdraw {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #9a3412;
+}
+
+/* Activity history */
+#history {
+    padding-left: 310px; 
+    margin-bottom: 0;
+}
+
+#history li {
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--border);
+    color: #475569;
+    overflow-wrap: anywhere;
+}
+
+#history li:last-child {
+    border-bottom: 0;
+}
+
+/* Smaller screens: turn the sidebar into a top header */
+@media (max-width: 760px) {
+    body {
+        padding: 18px 16px 30px;
+    }
+
+    header {
+        position: relative;
+        width: 100%;
+        min-height: auto;
+        padding: 25px 22px;
+        margin-bottom: 24px;
+        border-radius: 14px;
+    }
+
+    header h1 {
+        margin-bottom: 14px;
+        font-size: 28px;
+    }
+
+    header p:last-child {
+        margin-top: 14px;
+        padding-top: 12px;
+    }
+
+    h2 {
+        font-size: 22px;
+    }
+
+    .card {
+        padding: 19px;
+    }
+
+    .summary-card {
+        flex-basis: 130px;
+        padding: 17px;
+    }
+
+    .summary-number {
+        font-size: 27px;
+    }
+
+    button {
+        margin-bottom: 7px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition: none !important;
+    }
+}
+
+/* FIX SUMMARY CARD LAYOUT */
+
+
+.summary-grid {
+    display: grid;
+   grid-template-columns: repeat(4, minmax(140px, 1fr)); 
+    gap: 16px;
+    margin: 0 0 20px;
+    align-items: stretch;
+}
+
+.summary-card {
+    width: 100%;
+    min-height: 125px;
+    padding: 20px;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.summary-number {
+    font-size: 30px;
+    font-weight: 700;
+}
+
+@media (max-width: 1200px) {
+    .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 600px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.history-controls {
+    display: flex;
+    gap: 12px;
+    margin: 16px 0;
+    flex-wrap: wrap;
+}
+
+.history-controls input,
+.history-controls select {
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border: 1px solid #dbe3ef;
+    border-radius: 10px;
+    background: #ffffff;
+    color: #172033;
+    font: inherit;
+    min-width: 0;
+}
+
+.history-controls input {
+    flex: 1;
+    min-width: 220px;
+}
+
+.history-controls select {
+    width: 180px;
+}
+
+.history-controls input:focus,
+.history-controls select:focus {
+    outline: 2px solid #0d9488;
+    outline-offset: 2px;
+}
+
+#history li {
+    padding: 12px 14px;
+    margin-bottom: 8px;
+    border: 1px solid #e5eaf2;
+    border-radius: 8px;
+    background: #f8fafc;
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+    .history-controls input,
+    .history-controls select {
+        width: 100%;
+        min-width: 0;
+    }
+}
+
+.team-credit {
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(255, 255, 255, 0.18);
+    color: #5eead4;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    line-height: 1.6;
+}
+.toast-message {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: #12233f;
+    color: white;
+    padding: 16px 22px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    font-weight: 600;
+    z-index: 1000;
+    animation: toastSlideIn 0.35s ease-out;
+} 
+
+
+
+.toast-message {
+    position: fixed;
+    right: 14px;
+    bottom: 24px;
+    background: #0f9b8e;
+    color: white;
+    padding: 16px 22px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+    font-weight: 600;
+    z-index: 9999;
+}
+
+.toast-message[hidden] {
+    display: none;
+}
+
+.sidebar-illustration {
+    margin: 16px 0;
+    text-align: center;
+}
+
+.sidebar-img {
+    width: 180px;
+    max-width: 100%;
+    height: auto;
+    border-radius: 12px;
+    display: inline-block;
+}
+
+.consent-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 20px;
+    align-items: stretch;
+}
+
+.consent-grid .card {
+    min-width: 0;
+    padding: 20px; 
+}
+
+.consent-grid .card p {
+    overflow-wrap: anywhere;
+}
+
+.consent-grid .card button {
+    padding: 12px 16px;
+    margin: 4px 4px 4px 0;
+    white-space: nowrap;
+} 
+
+@media (max-width: 1100px) {
+    .consent-grid {
+        grid-template-columns: 1fr;
+    }
+} 
+/* Smooth consent card animation */
+.consent-grid .card {
+    transition: transform 0.25s ease,
+                box-shadow 0.25s ease;
+    animation: cardFadeIn 0.5s ease both;
+}
+
+.consent-grid .card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 12px 28px rgba(18, 35, 63, 0.12);
+}
+
+/* Gentle entrance */
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .consent-grid .card {
+        animation: none;
+        transition: none;
+    }
+} 
+   
+/* Smooth consent card animation */
+.card {
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 28px rgba(18, 35, 63, 0.10);
+}
+
+/* Respect reduced-motion preferences */
+@media (prefers-reduced-motion: reduce) {
+    .card {
+        transition: none;
+    }
+
+    .card:hover {
+        transform: none;
+    }
+}
+   
+/* Dashboard entrance animation */
+@keyframes fadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.summary-grid,
+.card {
+    animation: fadeUp 0.6s ease both;
+}
+
+.summary-grid {
+    animation-delay: 0.1s;
+}
+
+.card:nth-of-type(1) {
+    animation-delay: 0.2s;
+}
+
+.card:nth-of-type(2) {
+    animation-delay: 0.3s;
+}
+
+.card:nth-of-type(3) {
+    animation-delay: 0.4s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .summary-grid,
+    .card {
+        animation: none;
+    }
+}
+@keyframes toastSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(15px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+} 
+@keyframes gradientFlow {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body {
+        animation: none;
+    }
+} 
+body {
+    background-color: #0b1730;
+} 
+
+
+@media (prefers-reduced-motion: reduce) {
+    body {
+        animation: none;
+    }
+} 
+
+
+/* Animated digital network overlay */
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0 0 0 384px;
+    pointer-events: none;
+    z-index: 0;
+    background-image:
+        radial-gradient(circle, rgba(45, 212, 191, 0.8) 2px, transparent 3px),
+        linear-gradient(30deg, transparent 49.5%, rgba(56, 189, 248, 0.22) 50%, transparent 50.5%),
+        linear-gradient(150deg, transparent 49.5%, rgba(56, 189, 248, 0.22) 50%, transparent 50.5%);
+    background-size: 100px 100px, 100px 100px, 100px 100px;
+   
+}
+
+
+
+@media (prefers-reduced-motion: reduce) {
+   body::before {
+    animation: none !important;
+    }
+}
+
+
+.sidebar-footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  padding-top: 22px;
+  margin-top: 28px;
+}
+
+.sidebar-footer h3 {
+  color: #54e6d2;
+  font-size: 19px;
+  margin-bottom: 10px;
+}
+
+.sidebar-footer p {
+  color: #c5d2e5;
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+   </style> 
+</head>
+<body>  
+    <header>
+        <h1>ConsentGuard</h1>
+        
+<div class="sidebar-illustration">
+    <img src="privacy-illustration.png" alt="Person managing data privacy" class="sidebar-img">
+</div>
+
+       
+<div class="sidebar-footer">
+  <h3>Privacy starts with you.</h3>
+  <p>Your data. Your permission. Your control.</p>
+</div>
+
+          
+        </p>
+    </header>
+
+<div class="summary-grid">
+    <div class="summary-card">
+        <span class="summary-number">3</span>
+        <span class="summary-label">Consent Purposes</span>
+    </div> 
+   
+<div class="summary-grid">
+    <div class="summary-card">
+        <span class="summary-number" id="granted-total">0</span>
+        <span class="summary-label">Granted</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-number" id="denied-total">0</span>
+        <span class="summary-label">Denied</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-number" id="withdrawn-total">0</span>
+        <span class="summary-label">Withdrawn</span>
+    </div>
+</div>
+ 
+</div>
+
+   <h2 style="color: #ffffff;">Manage your consent</h2>
+<p style="color: #dbeafe;">Choose how your demo data may be used.</p> 
+
+  <div class="consent-grid">
+    <div class="card">
+        <h3><span class="purpose-icon analytics-icon">📊</span> Analytics</h3> 
+        <p>Allow activity data to be used for analytics.</p>
+        <p class="status" id="analytics-status">Status: Not set</p>
+        <button class="grant" onclick="setStatus('analytics','Granted')">Grant</button>
+        <button class="deny" onclick="setStatus('analytics','Denied')">Deny</button>
+        <button class="withdraw" onclick="setStatus('analytics','Withdrawn')">Withdraw</button>
+    </div>
+
+    <div class="card">
+        <h3><span class="purpose-icon marketing-icon">📣</span> Marketing</h3> 
+        <p>Allow demo data to be used for marketing.</p>
+        <p class="status" id="marketing-status">Status: Not set</p>
+        <button class="grant" onclick="setStatus('marketing','Granted')">Grant</button>
+        <button class="deny" onclick="setStatus('marketing','Denied')">Deny</button>
+        <button class="withdraw" onclick="setStatus('marketing','Withdrawn')">Withdraw</button>
+    </div>
+
+    <div class="card">
+        <h3><span class="purpose-icon sharing-icon">🔗</span> Third-Party Sharing</h3> 
+        <p>Allow demo data to be shared with a specified service.</p>
+        <p class="status" id="sharing-status">Status: Not set</p>
+        <button class="grant" onclick="setStatus('sharing','Granted')">Grant</button>
+        <button class="deny" onclick="setStatus('sharing','Denied')">Deny</button>
+        <button class="withdraw" onclick="setStatus('sharing','Withdrawn')">Withdraw</button>
+    </div>
+    </div> 
+
+    <div class="card">
+        
+<h2>Activity history</h2>
+
+<div class="history-controls">
+    <input
+        type="text"
+        id="history-search"
+        placeholder="Search by purpose or action..."
+        aria-label="Search activity history"
+    >
+
+    <select id="history-filter" aria-label="Filter history by status">
+        <option value="all">All actions</option>
+        <option value="Granted">Granted</option>
+        <option value="Denied">Denied</option>
+        <option value="Withdrawn">Withdrawn</option>
+    </select>
+</div>
+
+<ol id="history">
+    <li>Dashboard created.</li>
+</ol>
+
+    </div>
+
+    <script>
+
+
+async function setStatus(purpose, status) {
+    const statusElement = document.getElementById(purpose + '-status');
+    const toast = document.getElementById('toast-message');
+
+    if (!statusElement) {
+        console.error('Status element not found:', purpose + '-status');
+        return;
+    }
+
+   const purposeNames = {
+    analytics: 'Analytics',
+    marketing: 'Marketing',
+    sharing: 'Third-Party Sharing'
+}; 
+
+    const actionNames = {
+        Granted: 'grant',
+        Denied: 'deny',
+        Withdrawn: 'withdraw'
+    };
+
+    const apiPurpose = purposeNames[purpose];
+    const action = actionNames[status];
+
+    if (!apiPurpose || !action) {
+        console.error('Invalid consent purpose or status.');
+        return;
+    }
+
+    try {
+        const response = await fetch('http://127.0.0.1:5001/api/consents', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                user_id: 'demo-user',
+                purpose: apiPurpose,
+                action: action
+            })
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(result.error || 'Could not save consent.');
+        }
+
+        statusElement.textContent = 'Status: ' + status;
+        statusElement.classList.remove(
+            'status-granted',
+            'status-denied',
+            'status-withdrawn'
+        );
+        statusElement.classList.add('status-' + status.toLowerCase());
+        updateConsentTotals();
+
+        if (toast) {
+            toast.textContent = apiPurpose + ' consent ' +
+                status.toLowerCase() + ' successfully.';
+            toast.hidden = false;
+            setTimeout(() => {
+                toast.hidden = true;
+            }, 3000);
+        }
+
+        console.log('Consent saved:', result);
+        await loadAuditHistory(); 
+       
+        
+    } catch (error) {
+        console.error('Consent API error:', error);
+        if (toast) {
+            toast.textContent = 'Could not save consent. Check that the backend is running.';
+            toast.hidden = false;
+        }
+    }
+}
+
+   
+
+function updateConsentTotals() {
+    const totals = {
+        Granted: 0,
+        Denied: 0,
+        Withdrawn: 0
+    };
+
+    ['analytics', 'marketing', 'sharing'].forEach(function (name) {
+        const element = document.getElementById(name + '-status');
+
+        if (element) {
+            const status = element.textContent
+                .replace('Status: ', '')
+                .trim();
+
+            if (Object.prototype.hasOwnProperty.call(totals, status)) {
+                totals[status]++;
+            }
+        }
+    });
+
+    document.getElementById('granted-total').textContent = totals.Granted;
+    document.getElementById('denied-total').textContent = totals.Denied;
+    document.getElementById('withdrawn-total').textContent = totals.Withdrawn;
+}
+
+const historySearch = document.getElementById('history-search');
+const historyFilter = document.getElementById('history-filter');
+const historyList = document.getElementById('history');
+
+function filterHistory() {
+    if (!historySearch || !historyFilter || !historyList) {
+        return;
+    }
+
+    const searchText = historySearch.value.toLowerCase().trim();
+    const selectedStatus = historyFilter.value;
+
+    historyList.querySelectorAll('li').forEach(function (item) {
+        const text = item.textContent.toLowerCase();
+        const matchesSearch = text.includes(searchText);
+        const matchesStatus =
+            selectedStatus === 'all' ||
+            text.includes(selectedStatus.toLowerCase());
+
+        item.hidden = !(matchesSearch && matchesStatus);
+    });
+}
+filterHistory();
+
+if (historySearch) {
+    historySearch.addEventListener('input', filterHistory);
+}
+if (historyFilter) {
+    historyFilter.addEventListener('change', filterHistory);
+}
+
+
+// Your existing code above
+
+async function loadConsents() {
+    // Paste the complete function here
+}
+
+async function loadAuditHistory() {
+    // Your existing function continues here
+} 
+async function loadAuditHistory() {
+    const historyList = document.getElementById('history');
+
+    try {
+        const response = await fetch('http://127.0.0.1:5001/api/audit');
+
+        if (!response.ok) {
+            throw new Error('Could not load audit history');
+        }
+
+        const events = await response.json();
+        console.log('Audit events received:', events); 
+        historyList.innerHTML = '';
+
+        events.slice(0, 20).forEach(function (event) { 
+            const item = document.createElement('li');
+            item.textContent =
+                event.purpose + ' — ' +
+                event.action + ' — ' +
+                event.created_at;
+            historyList.appendChild(item);
+        });
+
+        filterHistory();
+    } catch (error) {
+        console.error('Audit history error:', error);
+    }
+}
+
+loadAuditHistory();
+ 
+    </script>
+  
+<div id="toast-message" class="toast-message" role="status" aria-live="polite" hidden></div>
+  
+</body>
+</html>
+
+

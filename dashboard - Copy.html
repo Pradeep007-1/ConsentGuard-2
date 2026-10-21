@@ -1,0 +1,431 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ConsentGuard Dashboard</title>
+    <style>
+        body { 
+            
+body {
+    font-family: Arial, sans-serif;
+    background: #f3f6fb;
+    color: #172033;
+    max-width: 1050px;
+    margin: 32px auto;
+    padding: 24px;
+    line-height: 1.6;
+}
+
+        }
+        header {
+            
+
+header {
+    background: #172554;
+    color: #ffffff;
+    padding: 28px 32px;
+    border-radius: 16px;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 24px rgba(23, 37, 84, 0.12);
+    border-left: 5px solid #0d9488;
+}
+
+header h1 {
+    margin-top: 0;
+    font-size: 32px;
+    letter-spacing: -0.5px;
+}
+
+header p {
+    margin: 8px 0;
+    line-height: 1.6;
+}
+
+        }
+        .card {
+            
+.card {
+    background: #ffffff;
+    padding: 26px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 14px rgba(23, 37, 84, 0.04);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(23, 37, 84, 0.08);
+}
+
+        }
+        button {
+            
+button {
+    padding: 10px 16px;
+    margin: 5px 6px 5px 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+button:hover {
+    transform: translateY(-1px);
+}
+
+button:focus-visible {
+    outline: 3px solid #99f6e4;
+    outline-offset: 2px;
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+        }
+        .grant { background: #dcfce7; }
+        .deny { background: #fee2e2; }
+        .withdraw { background: #e2e8f0; }
+        .status { font-weight: bold; }
+    
+/* ConsentGuard visual improvements */
+
+body {
+    line-height: 1.6;
+}
+
+header {
+    box-shadow: 0 6px 18px rgba(23, 37, 84, 0.12);
+}
+
+.card {
+    border: 1px solid #e5eaf2;
+    box-shadow: 0 4px 14px rgba(23, 37, 84, 0.05);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(23, 37, 84, 0.10);
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-weight: 600;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+button:hover {
+    opacity: 0.88;
+    transform: translateY(-1px);
+}
+
+button:focus-visible {
+    outline: 3px solid #93c5fd;
+    outline-offset: 3px;
+}
+
+#history {
+
+#history {
+    list-style: none;
+    padding: 0;
+    margin: 16px 0 0;
+}
+
+#history li {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #0d9488;
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    color: #334155;
+    font-size: 14px;
+    line-height: 1.6;
+    overflow-wrap: anywhere;
+}
+
+}
+
+@media (max-width: 600px) {
+    body {
+        margin: 16px;
+        padding: 8px;
+    }
+
+    header {
+        padding: 18px;
+    }
+
+    .card {
+        padding: 16px;
+    }
+
+    button {
+        margin: 3px;
+    }
+}
+
+/* Consent status colors */
+#Analytics-status,
+#Marketing-status,
+#Third-Party\ Sharing-status {
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-weight: 600;
+    background: #f1f5f9;
+    color: #334155;
+}
+
+.status-granted {
+    background: #dcfce7 !important;
+    color: #166534 !important;
+}
+
+.status-denied {
+    background: #fee2e2 !important;
+    color: #991b1b !important;
+}
+
+.status-withdrawn {
+    background: #fef3c7 !important;
+    color: #92400e !important;
+}
+
+.summary-grid {
+   
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+    align-items: stretch;
+}
+
+.summary-card {
+    background: #ffffff;
+    padding: 22px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 4px 14px rgba(23, 37, 84, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+@media (max-width: 700px) {
+    .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 480px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+}
+
+.summary-card {
+    background: white;
+    padding: 22px;
+    border-radius: 12px;
+    border: 1px solid #e5eaf2;
+    box-shadow: 0 4px 14px rgba(23, 37, 84, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.summary-number {
+    font-size: 28px;
+    font-weight: 700;
+    color: #172554;
+}
+
+.summary-label {
+    color: #64748b;
+    font-size: 14px;
+}
+
+@media (max-width: 600px) {
+    .summary-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ConsentGuard</h1>
+        <p>Purpose-Based Consent Management</p>
+        <p>Your data. Your choice.</p>
+    </header>
+
+<div class="summary-grid">
+    <div class="summary-card">
+        <span class="summary-number">3</span>
+        <span class="summary-label">Consent Purposes</span>
+    </div> 
+   
+<div class="summary-grid">
+    <div class="summary-card">
+        <span class="summary-number" id="granted-total">0</span>
+        <span class="summary-label">Granted</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-number" id="denied-total">0</span>
+        <span class="summary-label">Denied</span>
+    </div>
+    <div class="summary-card">
+        <span class="summary-number" id="withdrawn-total">0</span>
+        <span class="summary-label">Withdrawn</span>
+    </div>
+</div>
+ 
+
+    <div class="summary-card">
+       <span class="summary-number" id="granted-count">0</span>
+        <span class="summary-label">Granted Purposes</span>
+    </div>
+</div>
+
+    <h2>Manage your consent</h2>
+    <p>Choose how your demo data may be used.</p>
+
+    <div class="card">
+        <h3>Analytics</h3>
+        <p>Allow activity data to be used for analytics.</p>
+        <p class="status" id="analytics-status">Status: Not set</p>
+        <button class="grant" onclick="setStatus('analytics','Granted')">Grant</button>
+        <button class="deny" onclick="setStatus('analytics','Denied')">Deny</button>
+        <button class="withdraw" onclick="setStatus('analytics','Withdrawn')">Withdraw</button>
+    </div>
+
+    <div class="card">
+        <h3>Marketing</h3>
+        <p>Allow demo data to be used for marketing.</p>
+        <p class="status" id="marketing-status">Status: Not set</p>
+        <button class="grant" onclick="setStatus('marketing','Granted')">Grant</button>
+        <button class="deny" onclick="setStatus('marketing','Denied')">Deny</button>
+        <button class="withdraw" onclick="setStatus('marketing','Withdrawn')">Withdraw</button>
+    </div>
+
+    <div class="card">
+        <h3>Third-Party Sharing</h3>
+        <p>Allow demo data to be shared with a specified service.</p>
+        <p class="status" id="sharing-status">Status: Not set</p>
+        <button class="grant" onclick="setStatus('sharing','Granted')">Grant</button>
+        <button class="deny" onclick="setStatus('sharing','Denied')">Deny</button>
+        <button class="withdraw" onclick="setStatus('sharing','Withdrawn')">Withdraw</button>
+    </div>
+
+    <div class="card">
+        <h2>Activity history</h2>
+        <ol id="history">
+            <li>Dashboard created.</li>
+        </ol>
+    </div>
+
+    <script>
+
+function setStatus(purpose, status) {
+    const statusElement = document.getElementById(purpose + '-status');
+    
+
+    if (!statusElement) {
+        console.error('Status element not found:', purpose + '-status');
+        return;
+    }
+
+    statusElement.textContent = 'Status: ' + status;
+
+    statusElement.classList.remove(
+        'status-granted',
+        'status-denied',
+        'status-withdrawn'
+    );
+
+    if (status === 'Granted') {
+        statusElement.classList.add('status-granted');
+    } else if (status === 'Denied') {
+        statusElement.classList.add('status-denied');
+    } else if (status === 'Withdrawn') {
+        statusElement.classList.add('status-withdrawn');
+    }
+
+    const history = document.getElementById('history');
+
+    if (history) {
+        const item = document.createElement('li');
+        item.textContent = purpose + ': ' + status + ' — ' +
+            new Date().toLocaleString();
+
+        history.prepend(item);
+    }
+ 
+ 
+const grantedCount = document.getElementById('granted-count');
+
+if (grantedCount) {
+    const purposes = [
+        'analytics',
+        'marketing',
+        'sharing'
+    ];
+
+    let count = 0;
+
+    purposes.forEach(function (name) {
+        const element = document.getElementById(name + '-status');
+
+        if (
+            element &&
+            element.textContent.trim() === 'Status: Granted'
+        ) {
+            count++;
+        }
+    });
+
+    grantedCount.textContent = count;
+}
+ const totals = {
+    Granted: 0,
+    Denied: 0,
+    Withdrawn: 0
+};
+
+['analytics', 'marketing', 'sharing'].forEach(function (name) {
+    const element = document.getElementById(name + '-status');
+
+    if (element) {
+        const currentStatus = element.textContent.replace('Status: ', '').trim();
+
+        if (Object.prototype.hasOwnProperty.call(totals, currentStatus)) {
+            totals[currentStatus]++;
+        }
+    }
+});
+
+document.getElementById('granted-total').textContent = totals.Granted;
+document.getElementById('denied-total').textContent = totals.Denied;
+document.getElementById('withdrawn-total').textContent = totals.Withdrawn;  
+
+}
+
+    </script>
+</body>
+</html>
+ 
