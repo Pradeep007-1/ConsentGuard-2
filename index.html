@@ -136,7 +136,8 @@ async function simulateAccess() {
 }
 async function exportAudit() { try { const response=await fetch(API+'/audit/export'); if(!response.ok) throw new Error('CSV export failed ('+response.status+')'); const blob=await response.blob(), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url;a.download='consentguard_audit.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);showToast('Audit CSV exported.'); } catch(error){showToast(error.message,true);} }
 document.addEventListener('click',event=>{const button=event.target.closest('[data-action][data-purpose]');if(button){setConsent(button.dataset.purpose,button.dataset.action);}});
-document.getElementById('simulate-button').addEventListener('click',simulateAccess);\n
+document.getElementById('simulate-button').addEventListener('click',simulateAccess);
+
 async function runLifecycleTests() {
  const button=document.getElementById('run-tests'), body=document.getElementById('test-rows'), summary=document.getElementById('test-summary');
  button.disabled=true; button.textContent='Running tests…'; body.innerHTML=''; const results=[];
