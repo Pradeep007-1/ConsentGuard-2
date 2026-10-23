@@ -141,7 +141,7 @@ async function runLifecycleTests() {
  const button=document.getElementById('run-tests'), body=document.getElementById('test-rows'), summary=document.getElementById('test-summary');
  button.disabled=true; button.textContent='Running tests…'; body.innerHTML=''; const results=[];
  const uid='lifecycle-test-'+Date.now();
- const post=(path,payload)=>requestJson(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+ const post=async(path,payload)=>{const response=await fetch(API+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await response.json().catch(()=>({}));return {response,data};};
  const check=async(name,expected,fn)=>{try{const observed=await fn();const pass=observed.pass;results.push({name,expected,observed:observed.text,pass});}catch(e){results.push({name,expected,observed:e.message,pass:false});}};
  try {
   await check('Health endpoint responds','HTTP 200',async()=>{const r=await requestJson('/health');return {pass:r.response.ok,text:'HTTP '+r.response.status};});
