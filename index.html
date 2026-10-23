@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#101b35">
+<title>ConsentGuard | Purpose-based privacy control</title>
+<style>
+:root{color-scheme:light;--ink:#15233b;--muted:#63718a;--line:#e2e8f2;--paper:#f5f7fc;--white:#fff;--navy:#101b35;--violet:#6558e8;--teal:#087f75;--green:#18794e;--red:#b42335;--amber:#9a6700;--shadow:0 14px 36px rgba(27,43,79,.07)}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif}button,input,select{font:inherit}button{cursor:pointer}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #a5b4fc;outline-offset:3px}.shell{min-height:100vh;display:grid;grid-template-columns:248px minmax(0,1fr)}aside{background:var(--navy);color:#fff;padding:28px 20px;display:flex;flex-direction:column;gap:28px} .brand{display:flex;align-items:center;gap:11px;font-size:19px;font-weight:800;letter-spacing:-.4px}.brand-mark{display:grid;place-items:center;width:40px;height:40px;border-radius:13px;background:linear-gradient(135deg,#a99cff,#5b50d6);font-weight:900;font-size:18px}.brand small{display:block;color:#9daac4;font-size:10px;letter-spacing:1.5px;font-weight:700;margin-top:1px}.side-label{color:#8391ad;font-size:10px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;margin:5px 10px}.nav{display:grid;gap:7px}.nav a{display:flex;align-items:center;gap:11px;padding:11px 12px;color:#c8d2e5;text-decoration:none;border-radius:10px;font-size:13px}.nav a:hover,.nav a.active{background:#202e4d;color:#fff}.nav-icon{width:22px;text-align:center;font-size:16px}.side-note{margin-top:auto;border:1px solid #30405e;background:#182643;border-radius:14px;padding:15px}.side-note strong{display:block;font-size:12px;margin-bottom:5px}.side-note p{margin:0;color:#b4c0d7;font-size:12px}.side-note .dot{display:inline-block;width:7px;height:7px;background:#4ade80;border-radius:50%;margin-right:6px}.main{min-width:0;padding:28px clamp(18px,3vw,44px) 40px}.topbar{display:flex;justify-content:space-between;align-items:center;gap:18px;margin-bottom:26px}.eyebrow{font-size:11px;letter-spacing:1.5px;font-weight:800;color:var(--violet);text-transform:uppercase}.topbar h1{font-size:clamp(24px,3vw,34px);letter-spacing:-1.2px;line-height:1.15;margin:5px 0 0}.user-chip{display:flex;align-items:center;gap:10px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px 12px;color:var(--muted);font-size:12px;white-space:nowrap}.avatar{display:grid;place-items:center;width:30px;height:30px;border-radius:10px;background:#e9e7ff;color:#5145cd;font-weight:800}.hero{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(220px,.8fr);gap:18px;margin-bottom:20px}.hero-copy{background:linear-gradient(120deg,#1a2850,#2d3d70 70%,#5145cd);color:#fff;border-radius:18px;padding:26px;position:relative;overflow:hidden}.hero-copy:after{content:"";position:absolute;width:230px;height:230px;border:1px solid #ffffff22;border-radius:50%;right:-65px;top:-95px;box-shadow:0 0 0 28px #ffffff0a,0 0 0 58px #ffffff08}.hero-copy h2{position:relative;z-index:1;font-size:clamp(20px,2.4vw,28px);line-height:1.25;letter-spacing:-.6px;margin:9px 0}.hero-copy p{position:relative;z-index:1;max-width:580px;color:#dbe4ff;margin:0 0 18px;font-size:13px}.hero-kicker{font-size:11px;color:#c7c2ff;letter-spacing:1.4px;font-weight:800;text-transform:uppercase}.hero-actions{display:flex;gap:10px;flex-wrap:wrap;position:relative;z-index:1}.btn{border:1px solid transparent;border-radius:9px;padding:10px 14px;font-size:12px;font-weight:750;transition:transform .15s,box-shadow .15s}.btn:hover{transform:translateY(-1px);box-shadow:0 5px 15px #101b3520}.btn-light{background:#fff;color:#1d2c4c}.btn-ghost{border-color:#ffffff60;color:#fff;background:#ffffff10}.btn-primary{background:var(--violet);color:#fff}.btn-outline{background:#fff;border-color:var(--line);color:var(--ink)}.btn-danger{background:#fff0f1;color:var(--red);border-color:#ffd5d9}.hero-status{background:#fff;border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:space-between}.hero-status .label{color:var(--muted);font-size:12px}.notice-version{font-size:29px;font-weight:850;letter-spacing:-1px;margin:4px 0}.hash{font:11px/1.6 ui-monospace,SFMono-Regular,Consolas,monospace;word-break:break-all;background:#f4f6fb;border:1px solid var(--line);border-radius:8px;padding:9px;color:#495772;margin-top:8px}.mini-line{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-top:14px;font-size:11px;color:var(--muted)}.pill{display:inline-flex;align-items:center;gap:6px;border-radius:99px;padding:5px 9px;font-size:10px;font-weight:800;background:#e9f8ef;color:var(--green)}.pill:before{content:"";width:6px;height:6px;background:currentColor;border-radius:50%}.section-head{display:flex;justify-content:space-between;align-items:end;gap:14px;margin:28px 0 13px}.section-head h2{font-size:18px;letter-spacing:-.4px;margin:0}.section-head p{font-size:12px;color:var(--muted);margin:4px 0 0}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:24px}.metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:17px;box-shadow:0 4px 14px #1b2b4f05;min-width:0}.metric-top{display:flex;justify-content:space-between;align-items:center;gap:8px;color:var(--muted);font-size:11px;font-weight:650}.metric-icon{display:grid;place-items:center;width:32px;height:32px;border-radius:10px;background:#f0efff;color:#5b50d6;font-size:15px}.metric-value{font-size:28px;font-weight:850;letter-spacing:-1px;margin:12px 0 2px}.metric-foot{font-size:10px;color:var(--muted)}.purpose-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}.purpose-card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:19px;box-shadow:0 5px 20px #1b2b4f05;min-width:0;display:flex;flex-direction:column}.purpose-head{display:flex;align-items:center;gap:10px}.purpose-icon{width:40px;height:40px;border-radius:12px;background:#f0efff;color:#5b50d6;display:grid;place-items:center;font-size:19px}.purpose-card h3{margin:0;font-size:15px;letter-spacing:-.2px}.purpose-card .purpose-sub{font-size:11px;color:var(--muted);margin:3px 0 16px}.status-row{display:flex;justify-content:space-between;align-items:center;gap:10px;border-top:1px solid #edf0f6;padding-top:13px;margin-top:auto;font-size:11px;color:var(--muted)}.status-text{font-weight:800;color:#64748b}.status-text.granted{color:var(--green)}.status-text.denied,.status-text.withdrawn{color:var(--red)}.status-text.stale{color:var(--amber)}.purpose-actions{display:flex;gap:7px;margin-top:13px}.purpose-actions .btn{flex:1;padding:9px 6px}.small{font-size:10px;color:var(--muted)}.panel{background:#fff;border:1px solid var(--line);border-radius:15px;padding:20px;box-shadow:0 5px 20px #1b2b4f05;min-width:0}.two-col{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:15px}.panel h3{font-size:14px;margin:0 0 5px}.panel-intro{font-size:11px;color:var(--muted);margin:0 0 16px}.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.field{display:grid;gap:6px;margin-bottom:12px}.field label{font-size:11px;font-weight:750;color:#44516a}.field input,.field select,.toolbar input,.toolbar select{width:100%;min-width:0;border:1px solid #dce3ef;border-radius:9px;padding:10px 11px;background:#fff;color:var(--ink);font-size:12px}.notice-body{background:#f7f8fc;border:1px solid var(--line);padding:13px;border-radius:10px;font-size:12px;color:#47536b;white-space:pre-wrap}.result-box{margin-top:13px;padding:12px;border-radius:10px;background:#f4f6fb;color:#53617a;font-size:12px;overflow-wrap:anywhere}.result-box.allowed{background:#eaf8ef;color:#17653e}.result-box.blocked{background:#fff0f1;color:#a51f32}.audit-head{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:13px 0}.toolbar input{flex:1;min-width:180px}.toolbar select{width:auto;min-width:135px}.table-wrap{overflow-x:auto}table{border-collapse:collapse;width:100%;min-width:650px;font-size:11px}th{text-align:left;color:#77839a;font-size:10px;text-transform:uppercase;letter-spacing:.7px;background:#f7f8fc;padding:11px 10px;border-bottom:1px solid var(--line)}td{padding:12px 10px;border-bottom:1px solid #edf0f6;color:#45526a;vertical-align:top}tbody tr:last-child td{border-bottom:0}.action-tag{display:inline-block;border-radius:6px;padding:4px 7px;font-size:10px;font-weight:800;background:#edf0f7;color:#53617a}.action-tag.good{background:#e9f8ef;color:#17653e}.action-tag.bad{background:#fff0f1;color:#a51f32}.empty{text-align:center;padding:28px;color:var(--muted);font-size:12px}.footer{margin-top:24px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#8792a7;font-size:10px}.toast{position:fixed;right:20px;bottom:20px;max-width:min(380px,calc(100vw - 40px));background:#172746;color:#fff;padding:13px 16px;border-radius:11px;box-shadow:0 12px 36px #101b3540;font-size:12px;z-index:20}.toast.error{background:#922b39}.toast[hidden]{display:none}.muted{color:var(--muted)}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:1100px){.shell{grid-template-columns:205px minmax(0,1fr)}aside{padding:24px 14px}.hero{grid-template-columns:1fr}.hero-status{gap:10px}.purpose-grid{grid-template-columns:1fr}.purpose-card{padding:17px}.metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.two-col{grid-template-columns:1fr}}
+@media(max-width:700px){.shell{display:block}aside{padding:14px 16px;gap:12px}.brand-mark{width:34px;height:34px}.nav{grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}.nav a{justify-content:center;padding:9px 5px;font-size:10px;flex-direction:column;gap:2px}.nav-icon{font-size:15px}.side-label,.side-note{display:none}.main{padding:20px 14px 30px}.topbar{align-items:flex-start}.user-chip{font-size:0;padding:6px}.user-chip .avatar{font-size:12px}.hero-copy{padding:21px}.metrics{gap:8px}.metric{padding:13px}.metric-value{font-size:24px}.field-row{grid-template-columns:1fr}.section-head{align-items:flex-start;flex-direction:column}.panel{padding:15px}.purpose-actions .btn{font-size:10px}.footer{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="shell">
+<aside>
+  <div class="brand"><div class="brand-mark">CG</div><div>ConsentGuard<small>PRIVACY CONTROL CENTER</small></div></div>
+  <div><div class="side-label">Workspace</div><nav class="nav" aria-label="Main navigation">
+    <a class="active" href="#overview"><span class="nav-icon">◫</span>Overview</a>
+    <a href="#purposes"><span class="nav-icon">✓</span>My consent</a>
+    <a href="#simulator"><span class="nav-icon">⌁</span>Access lab</a>
+    <a href="#audit"><span class="nav-icon">▤</span>Audit trail</a>
+  </nav></div>
+  <div class="side-note"><strong><span class="dot"></span>Local demo environment</strong><p>Uses synthetic users and mock data only. Access decisions are enforced by the Flask backend.</p></div>
+</aside>
+<main class="main">
+  <header class="topbar" id="overview">
+    <div><div class="eyebrow">PS-002 · Purpose-based consent</div><h1>Your data. Your decision.</h1></div>
+    <div class="user-chip"><span class="avatar">DU</span><span>Demo user<br><strong style="color:#15233b">demo-user</strong></span></div>
+  </header>
+  <section class="hero">
+    <div class="hero-copy"><div class="hero-kicker">Consent, made transparent</div><h2>Privacy controls that put you in charge.</h2><p>Choose exactly how your synthetic data can be used. Every decision is recorded, and downstream access is checked against your latest consent and notice version.</p><div class="hero-actions"><a class="btn btn-light" href="#purposes" style="text-decoration:none">Manage my consent ↓</a><a class="btn btn-ghost" href="#audit" style="text-decoration:none">View audit evidence</a></div></div>
+    <div class="hero-status"><div><div class="label">Active privacy notice</div><div class="notice-version" id="notice-version">Loading…</div><div class="small" id="notice-status">Checking current notice</div><div class="hash" id="notice-hash">SHA-256 · loading notice hash…</div></div><div class="mini-line"><span>Notice integrity</span><span class="pill">SHA-256</span></div></div>
+  </section>
+  <section class="metrics" aria-label="Consent and access summary">
+    <div class="metric"><div class="metric-top"><span>Supported purposes</span><span class="metric-icon">◈</span></div><div class="metric-value">03</div><div class="metric-foot">Analytics · Marketing · Service Improvement</div></div>
+    <div class="metric"><div class="metric-top"><span>Current grants</span><span class="metric-icon">✓</span></div><div class="metric-value" id="metric-granted">—</div><div class="metric-foot">Purpose-specific permissions</div></div>
+    <div class="metric"><div class="metric-top"><span>Access allowed</span><span class="metric-icon">↗</span></div><div class="metric-value" id="metric-allowed">—</div><div class="metric-foot">Mock API decisions in audit log</div></div>
+    <div class="metric"><div class="metric-top"><span>Access denied</span><span class="metric-icon">⊘</span></div><div class="metric-value" id="metric-denied">—</div><div class="metric-foot">Requests blocked by enforcement</div></div>
+  </section>
+  <section id="purposes">
+    <div class="section-head"><div><h2>Manage purpose permissions</h2><p>Consent is separate for each purpose. Withdrawing one does not grant or revoke the others.</p></div><button class="btn btn-outline" id="refresh-button">↻ Refresh status</button></div>
+    <div class="purpose-grid">
+      <article class="purpose-card" data-purpose="Analytics"><div class="purpose-head"><div class="purpose-icon">◷</div><h3>Analytics</h3></div><p class="purpose-sub">Usage signals and feature activity</p><div class="small">Example mock fields: page views, feature usage.</div><div class="status-row"><span>Current status</span><span class="status-text" id="status-Analytics">Loading…</span></div><div class="purpose-actions"><button class="btn btn-primary" data-action="grant" data-purpose="Analytics">Grant</button><button class="btn btn-outline" data-action="deny" data-purpose="Analytics">Deny</button><button class="btn btn-danger" data-action="withdraw" data-purpose="Analytics">Withdraw</button></div></article>
+      <article class="purpose-card" data-purpose="Marketing"><div class="purpose-head"><div class="purpose-icon">✉</div><h3>Marketing</h3></div><p class="purpose-sub">Preferences and relevant communications</p><div class="small">Example mock fields: email preferences, offers.</div><div class="status-row"><span>Current status</span><span class="status-text" id="status-Marketing">Loading…</span></div><div class="purpose-actions"><button class="btn btn-primary" data-action="grant" data-purpose="Marketing">Grant</button><button class="btn btn-outline" data-action="deny" data-purpose="Marketing">Deny</button><button class="btn btn-danger" data-action="withdraw" data-purpose="Marketing">Withdraw</button></div></article>
+      <article class="purpose-card" data-purpose="Service Improvement"><div class="purpose-head"><div class="purpose-icon">⌁</div><h3>Service Improvement</h3></div><p class="purpose-sub">Reliability and service performance</p><div class="small">Example mock fields: performance, error counts.</div><div class="status-row"><span>Current status</span><span class="status-text" id="status-Service Improvement">Loading…</span></div><div class="purpose-actions"><button class="btn btn-primary" data-action="grant" data-purpose="Service Improvement">Grant</button><button class="btn btn-outline" data-action="deny" data-purpose="Service Improvement">Deny</button><button class="btn btn-danger" data-action="withdraw" data-purpose="Service Improvement">Withdraw</button></div></article>
+    </div>
+  </section>
+  <section id="simulator">
+    <div class="section-head"><div><h2>Mock data-access lab</h2><p>Make a real request to the Flask enforcement endpoint. The backend—not the interface—decides.</p></div></div>
+    <div class="two-col">
+      <div class="panel"><h3>Request synthetic data</h3><p class="panel-intro">Try before and after granting or withdrawing consent to demonstrate the access boundary.</p><div class="field-row"><div class="field"><label for="sim-user">Synthetic user ID</label><input id="sim-user" value="demo-user" maxlength="80"></div><div class="field"><label for="sim-purpose">Requested purpose</label><select id="sim-purpose"><option>Analytics</option><option>Marketing</option><option>Service Improvement</option></select></div></div><button class="btn btn-primary" id="simulate-button">Test access decision →</button><div class="result-box" id="sim-result" role="status" aria-live="polite">Ready. The result will show whether the API allows or denies this request.</div></div>
+      <div class="panel"><h3>Current notice</h3><p class="panel-intro">The notice version and SHA-256 fingerprint are returned by the backend.</p><div class="notice-body" id="notice-text">Loading the current notice text…</div><div class="small" style="margin-top:10px">If the notice changes, consent tied to an older version must no longer authorize access.</div></div>
+    </div>
+  </section>
+  <section id="audit">
+    <div class="section-head"><div><h2>Audit trail</h2><p>Review consent decisions and downstream access outcomes recorded by the backend.</p></div><button class="btn btn-outline" id="export-button">↓ Export CSV</button></div>
+    <div class="panel"><div class="audit-head"><div><h3>Recent activity</h3><p class="panel-intro" style="margin:4px 0 0">Timestamped evidence for consent lifecycle and enforcement.</p></div><button class="btn btn-outline" id="audit-refresh">↻ Refresh log</button></div><div class="toolbar"><input id="audit-search" type="search" placeholder="Search action, user, purpose…" aria-label="Search audit records"><select id="audit-filter" aria-label="Filter audit actions"><option value="all">All events</option><option value="grant">Grant</option><option value="deny">Deny</option><option value="withdraw">Withdraw</option><option value="data_access_allowed">Access allowed</option><option value="data_access_denied">Access denied</option></select></div><div class="table-wrap"><table><thead><tr><th>Time (UTC)</th><th>User</th><th>Purpose</th><th>Event</th><th>Notice</th><th>Evidence</th></tr></thead><tbody id="audit-rows"><tr><td colspan="6" class="empty">Loading audit events…</td></tr></tbody></table></div><div class="footer"><span id="audit-count">Loading records…</span><span>Evidence is synthetic and for prototype demonstration only.</span></div></div>
+  </section>
+  <footer class="footer"><span>ConsentGuard · SPARK · AIORI-3 Hackathon 2026</span><span>Prototype only — not a legal compliance certification.</span></footer>
+</main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+<script>
+const API = '/api';
+const PURPOSES = ['Analytics', 'Marketing', 'Service Improvement'];
+const state = {consents: [], audit: [], notice: null};
+function escapeHtml(value) { return String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function showToast(message, error=false) { const el=document.getElementById('toast'); el.textContent=message; el.classList.toggle('error',error); el.hidden=false; window.clearTimeout(showToast.timer); showToast.timer=window.setTimeout(()=>{el.hidden=true;},3600); }
+async function requestJson(path, options={}) { const response=await fetch(API+path,options); const data=await response.json().catch(()=>({})); if(!response.ok && response.status!==403) throw new Error(data.error||data.message||('Request failed ('+response.status+')')); return {response,data}; }
+function latestAction(purpose) { return state.audit.find(e=>e.user_id==='demo-user' && e.purpose===purpose && ['grant','deny','withdraw'].includes(e.action)); }
+function consentFor(purpose) { return state.consents.find(c=>c.user_id==='demo-user' && c.purpose===purpose); }
+function renderPurposes() {
+  let granted=0;
+  PURPOSES.forEach(purpose=>{
+    const consent=consentFor(purpose), latest=latestAction(purpose), el=document.getElementById('status-'+purpose);
+    let label='Not set', cls='';
+    if(consent && consent.notice_version !== (state.notice?.notice_version || '1.0')) { label='Re-consent required'; cls='stale'; }
+    else if(consent && Number(consent.granted)===1) { label='Granted'; cls='granted'; granted++; }
+    else if(latest?.action==='withdraw') { label='Withdrawn'; cls='withdrawn'; }
+    else if(latest?.action==='deny' || consent) { label='Denied'; cls='denied'; }
+    el.textContent=label; el.className='status-text '+cls;
+  });
+  document.getElementById('metric-granted').textContent=granted;
+}
+function renderAudit() {
+ const query=document.getElementById('audit-search').value.trim().toLowerCase(), filter=document.getElementById('audit-filter').value;
+ const events=state.audit.filter(e=>(filter==='all'||e.action===filter)&&[e.user_id,e.purpose,e.action,e.notice_version,e.details,e.created_at].join(' ').toLowerCase().includes(query));
+ const body=document.getElementById('audit-rows');
+ if(!events.length){body.innerHTML='<tr><td colspan="6" class="empty">No matching audit events yet.</td></tr>';}
+ else {body.innerHTML=events.slice(0,100).map(e=>{const good=e.action==='grant'||e.action==='data_access_allowed';const bad=e.action==='deny'||e.action==='withdraw'||e.action==='data_access_denied';return '<tr><td>'+escapeHtml(e.created_at||'—')+'</td><td>'+escapeHtml(e.user_id)+'</td><td>'+escapeHtml(e.purpose)+'</td><td><span class="action-tag '+(good?'good':bad?'bad':'')+'">'+escapeHtml(e.action)+'</span></td><td>'+escapeHtml(e.notice_version||'—')+'</td><td>'+escapeHtml(e.details||'—')+'</td></tr>';}).join('');}
+ document.getElementById('audit-count').textContent=events.length+' matching event'+(events.length===1?'':'s')+' · '+state.audit.length+' total records';
+ document.getElementById('metric-allowed').textContent=state.audit.filter(e=>e.action==='data_access_allowed').length;
+ document.getElementById('metric-denied').textContent=state.audit.filter(e=>e.action==='data_access_denied').length;
+}
+async function loadNotice() {
+ const {data}=await requestJson('/notice'); state.notice=data;
+ document.getElementById('notice-version').textContent='v'+data.notice_version;
+ document.getElementById('notice-status').textContent='Current version · '+(data.hash_algorithm||'SHA-256');
+ document.getElementById('notice-hash').textContent=data.notice_hash||'Hash unavailable';
+ document.getElementById('notice-text').textContent=data.notice_text||'No notice text returned by the backend.';
+}
+async function refreshAll() {
+ try {
+  const [consents,audit]=await Promise.all([requestJson('/consents?user_id=demo-user'),requestJson('/audit')]);
+  state.consents=consents.data; state.audit=audit.data;
+  try { await loadNotice(); } catch(e) { document.getElementById('notice-status').textContent='Notice endpoint unavailable'; }
+  renderPurposes(); renderAudit();
+ } catch(error) { showToast('Could not connect to the backend. Start backend/api.py on port 5001.',true); }
+}
+async function setConsent(purpose,action) {
+ const names={grant:'grant',deny:'deny',withdraw:'withdraw'};
+ if(!PURPOSES.includes(purpose)||!names[action]) return;
+ try {
+  const {data}=await requestJson('/consents',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:'demo-user',purpose,action:names[action]})});
+  showToast(purpose+': '+action+' recorded. Notice '+data.notice_version+'.');
+  await refreshAll();
+ } catch(error) { showToast(error.message,true); }
+}
+async function simulateAccess() {
+ const user=document.getElementById('sim-user').value.trim()||'demo-user', purpose=document.getElementById('sim-purpose').value, box=document.getElementById('sim-result');
+ box.className='result-box'; box.textContent='Checking current consent and notice version…';
+ try {
+  const {response,data}=await requestJson('/data-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user_id:user,purpose})});
+  if(response.ok) {box.className='result-box allowed';box.textContent='ACCESS ALLOWED · HTTP '+response.status+' — '+(data.message||'Mock data returned')+' · '+JSON.stringify(data.data||{});}
+  else {box.className='result-box blocked';box.textContent='ACCESS DENIED · HTTP '+response.status+' — '+(data.message||'Current active consent is required.');}
+  await refreshAll();
+ } catch(error) {box.className='result-box blocked';box.textContent='Request failed: '+error.message+'. Check that the Flask backend is running on port 5001.';}
+}
+async function exportAudit() { try { const response=await fetch(API+'/audit/export'); if(!response.ok) throw new Error('CSV export failed ('+response.status+')'); const blob=await response.blob(), url=URL.createObjectURL(blob), a=document.createElement('a'); a.href=url;a.download='consentguard_audit.csv';document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(url);showToast('Audit CSV exported.'); } catch(error){showToast(error.message,true);} }
+document.addEventListener('click',event=>{const button=event.target.closest('[data-action][data-purpose]');if(button){setConsent(button.dataset.purpose,button.dataset.action);}});
+document.getElementById('simulate-button').addEventListener('click',simulateAccess);
+document.getElementById('refresh-button').addEventListener('click',refreshAll);
+document.getElementById('audit-refresh').addEventListener('click',refreshAll);
+document.getElementById('export-button').addEventListener('click',exportAudit);
+document.getElementById('audit-search').addEventListener('input',renderAudit);
+document.getElementById('audit-filter').addEventListener('change',renderAudit);
+refreshAll();
+</script>
+</body>
+</html>
