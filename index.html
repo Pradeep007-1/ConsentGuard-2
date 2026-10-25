@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -13,7 +13,7 @@
    ========================================================================== */
 
 :root {
-  /* Dark Cybersecurity Theme (Default) */
+  /* Dark Cybersecurity Theme */
   --bg-canvas: #070c16;
   --bg-grid: rgba(56, 189, 248, 0.025);
   --surface-main: #0c1424;
@@ -22,15 +22,16 @@
   --surface-elevated: #162442;
   --surface-subtle: #0d1629;
 
-  --border-subtle: #1c2b48;
-  --border-medium: #273b61;
+  --border-subtle: #243552;
+  --border-medium: #33496f;
   --border-focus: #38bdf8;
   --border-glow: rgba(56, 189, 248, 0.2);
 
+  /* WCAG AA High Contrast Typography */
   --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --text-muted: #64748b;
-  --text-dim: #475569;
+  --text-secondary: #cbd5e1;
+  --text-muted: #94a3b8;
+  --text-dim: #64748b;
 
   /* Accents */
   --cyan-400: #38bdf8;
@@ -58,33 +59,36 @@
 }
 
 [data-theme="light"] {
+  /* Light Theme (Default) */
   --bg-canvas: #f8fafc;
-  --bg-grid: rgba(14, 165, 233, 0.02);
+  --bg-grid: rgba(14, 165, 233, 0.03);
   --surface-main: #ffffff;
   --surface-card: #ffffff;
-  --surface-card-hover: #f1f5f9;
-  --surface-elevated: #f8fafc;
+  --surface-card-hover: #f8fafc;
+  --surface-elevated: #ffffff;
   --surface-subtle: #f1f5f9;
 
-  --border-subtle: #e2e8f0;
-  --border-medium: #cbd5e1;
+  --border-subtle: #cbd5e1;
+  --border-medium: #94a3b8;
   --border-focus: #0284c7;
+  --border-glow: rgba(2, 132, 199, 0.2);
 
+  /* WCAG AA High Contrast (All > 7:1) */
   --text-primary: #0f172a;
-  --text-secondary: #334155;
-  --text-muted: #64748b;
-  --text-dim: #94a3b8;
+  --text-secondary: #1e293b;
+  --text-muted: #475569;
+  --text-dim: #475569;
 
   --emerald-bg: #ecfdf5;
-  --emerald-border: #a7f3d0;
+  --emerald-border: #059669;
   --emerald-text: #065f46;
 
   --rose-bg: #fff1f2;
-  --rose-border: #fecdd3;
+  --rose-border: #e11d48;
   --rose-text: #9f1239;
 
   --amber-bg: #fffbeb;
-  --amber-border: #fde68a;
+  --amber-border: #d97706;
   --amber-text: #92400e;
 }
 
@@ -224,18 +228,52 @@ nav.nav-tabs {
 
 .nav-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface-card);
 }
 
 .nav-tab.active {
   color: #ffffff;
   background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-  border-color: rgba(56, 189, 248, 0.35);
-  box-shadow: 0 1px 6px rgba(14, 165, 233, 0.2);
+  border-color: rgba(2, 132, 199, 0.4);
+  box-shadow: 0 1px 6px rgba(14, 165, 233, 0.25);
 }
 
 .nav-tab.active svg {
   opacity: 1;
+}
+
+/* Header Chips (Team & Protected Service) */
+.header-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.header-chip.team-chip {
+  font-family: var(--font-mono);
+  color: #0284c7;
+  border-color: rgba(2, 132, 199, 0.3);
+  background: rgba(2, 132, 199, 0.08);
+}
+
+.header-chip.service-chip {
+  color: var(--text-secondary);
+}
+
+@media (max-width: 1120px) {
+  .header-chip.service-chip { display: none; }
+}
+
+@media (max-width: 940px) {
+  .header-chip.team-chip { display: none; }
 }
 
 /* Header Utilities */
@@ -256,7 +294,7 @@ nav.nav-tabs {
   font-weight: 600;
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
-  color: var(--text-muted);
+  color: var(--text-secondary);
   white-space: nowrap;
 }
 
@@ -273,32 +311,63 @@ nav.nav-tabs {
   align-items: center;
   gap: 4px;
   background: var(--surface-card);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--border-medium);
   border-radius: 5px;
-  padding: 3px 8px;
+  padding: 3px 6px;
   font-size: 11.5px;
+  position: relative;
+  z-index: 1010;
 }
 
 .user-selector-pill select {
   border: none;
-  background: transparent;
-  font-weight: 700;
+  background: var(--surface-card);
+  font-weight: 600;
   font-family: inherit;
   color: var(--text-primary);
   outline: none;
   cursor: pointer;
   font-size: 11.5px;
+  padding: 2px 4px;
+  border-radius: 4px;
 }
 
+.user-selector-pill select:focus-visible {
+  outline: 2px solid var(--border-focus);
+}
+
+.user-selector-pill select option,
+select option {
+  background: var(--surface-card) !important;
+  color: var(--text-primary) !important;
+  padding: 6px 10px;
+}
+
+select {
+  background: var(--surface-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: 5px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 12px;
+}
+
+select:focus-visible {
+  border-color: var(--border-focus);
+  outline: none;
+}
+
+/* Neutral Notice Metadata Pill (Distinct from Active Navigation Tab) */
 .notice-pill {
   font-family: var(--font-mono);
   font-size: 11px;
-  font-weight: 700;
-  padding: 4px 8px;
+  font-weight: 600;
+  padding: 3px 8px;
   border-radius: 5px;
-  background: var(--cyan-glow);
-  color: var(--cyan-400);
-  border: 1px solid rgba(56, 189, 248, 0.25);
+  background: var(--surface-subtle);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-subtle);
   white-space: nowrap;
 }
 
@@ -1238,6 +1307,161 @@ details.tech-details summary {
 .toast.success { border-color: var(--emerald-border); background: #064e3b; color: #a7f3d0; }
 .toast.error { border-color: var(--rose-border); background: #881337; color: #fecdd3; }
 
+/* Subtle Card Hover & Motion */
+.metric-card, .purpose-card, .manage-consent-card, .dashboard-panel {
+  transition: transform 0.2s ease, border-color 0.2s ease;
+}
+
+.metric-card:hover, .purpose-card:hover, .manage-consent-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-medium);
+}
+
+/* Guided Demo Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-medium);
+  border-radius: 10px;
+  max-width: 660px;
+  width: 100%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--surface-main);
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px;
+}
+
+.modal-close-btn:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.demo-step-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  gap: 12px;
+  transition: all 0.2s ease;
+}
+
+.demo-step-row.running {
+  border-color: var(--cyan-400);
+  background: rgba(14, 165, 233, 0.05);
+}
+
+.demo-step-info {
+  flex: 1;
+}
+
+.demo-step-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.demo-step-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.demo-step-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.demo-step-code {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  max-width: 240px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-footer {
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-main);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Universal App Footer */
+footer.app-footer {
+  margin-top: 40px;
+  padding: 18px 20px;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--surface-main);
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 1024px) {
   .metrics-grid { grid-template-columns: repeat(3, 1fr); }
@@ -1258,15 +1482,19 @@ details.tech-details summary {
 <!-- Application Header -->
 <header class="app-header">
   <div class="header-inner">
-    <!-- Brand -->
-    <a href="#dashboard" class="brand-wrapper" onclick="switchPage('dashboard')">
-      <div class="brand-shield">
-        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
-      </div>
-      <div class="brand-title">
-        ConsentGuard <span class="brand-tag">PEP</span>
-      </div>
-    </a>
+    <!-- Brand & Service Context -->
+    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
+      <a href="#dashboard" class="brand-wrapper" onclick="switchPage('dashboard')">
+        <div class="brand-shield">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+        </div>
+        <div class="brand-title">
+          ConsentGuard <span class="brand-tag" title="Policy Enforcement Point">PEP</span>
+        </div>
+      </a>
+      <span class="header-chip team-chip" title="Hackathon Team & Problem Statement">Team SPARK · PS-002</span>
+      <span class="header-chip service-chip" title="Synthetic Protected Telehealth Service">HealthPulse Telehealth Portal</span>
+    </div>
 
     <!-- Navigation Tabs -->
     <nav class="nav-tabs" aria-label="Main Navigation">
@@ -1315,7 +1543,7 @@ details.tech-details summary {
       </div>
 
       <!-- Active Notice -->
-      <span class="notice-pill" id="header-notice-pill">v1.0</span>
+      <span class="notice-pill" id="header-notice-pill" title="Active Privacy Notice">v1.0</span>
 
       <!-- Theme Toggle -->
       <button class="theme-btn" id="theme-toggle-btn" title="Toggle Light / Dark Mode" aria-label="Toggle Theme">
@@ -1335,12 +1563,16 @@ details.tech-details summary {
       <div class="page-header-text">
         <h2>
           Privacy Control Center
-          <span style="font-size:10px; font-weight:700; background:var(--emerald-bg); color:var(--emerald-text); border:1px solid var(--emerald-border); padding:2px 7px; border-radius:4px; font-family:var(--font-mono);">PEP ACTIVE</span>
+          <span style="font-size:10px; font-weight:700; background:var(--emerald-bg); color:var(--emerald-text); border:1px solid var(--emerald-border); padding:2px 7px; border-radius:4px; font-family:var(--font-mono);" title="Policy Enforcement Point">PEP ACTIVE</span>
         </h2>
-        <p>Purpose-based data access control engine. Every downstream request is evaluated in real-time against cryptographic consent records.</p>
+        <p>Purpose-based data access control engine. Every downstream request is evaluated in real-time against hash-chained consent records.</p>
       </div>
-      <div>
-        <button class="btn btn-primary" onclick="switchPage('simulator')">
+      <div style="display:flex; gap:8px; align-items:center;">
+        <button class="btn btn-primary" id="btn-run-guided-demo" onclick="openGuidedDemo()">
+          <svg style="width:14px; height:14px;" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          Run Guided Demo
+        </button>
+        <button class="btn btn-outline" onclick="switchPage('simulator')">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
           Test Access Simulator →
         </button>
@@ -1356,18 +1588,18 @@ details.tech-details summary {
       </div>
       <div class="metric-card">
         <span class="m-label">Revoked / Denied</span>
-        <span class="m-number rose" id="dash-revoked-count">—</span>
-        <span class="m-sub">Blocked from downstream</span>
+        <span class="m-number rose" id="dash-revoked-count">0</span>
+        <span class="m-sub">Explicit: <span id="dash-explicit-revoked">0</span> · Not set: <span id="dash-notset-count">3</span></span>
       </div>
       <div class="metric-card">
         <span class="m-label">Requests Allowed</span>
         <span class="m-number cyan" id="dash-allowed-count">—</span>
-        <span class="m-sub">PEP HTTP 200 releases</span>
+        <span class="m-sub" title="Policy Enforcement Point">PEP HTTP 200 releases</span>
       </div>
       <div class="metric-card">
         <span class="m-label">Requests Blocked</span>
         <span class="m-number rose" id="dash-blocked-count">—</span>
-        <span class="m-sub">PEP HTTP 403 blocks</span>
+        <span class="m-sub" title="Policy Enforcement Point">PEP HTTP 403 blocks</span>
       </div>
       <div class="metric-card">
         <span class="m-label">Audit Integrity</span>
@@ -1393,7 +1625,9 @@ details.tech-details summary {
           <span id="dash-updated-Analytics">Updated: —</span>
         </div>
         <div class="purpose-fields">Protected: <code>page_views</code>, <code>feature_usage</code></div>
-        <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        <div id="dash-action-Analytics" style="margin-top:auto;">
+          <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        </div>
       </div>
 
       <!-- Marketing -->
@@ -1411,7 +1645,9 @@ details.tech-details summary {
           <span id="dash-updated-Marketing">Updated: —</span>
         </div>
         <div class="purpose-fields">Protected: <code>email_preferences</code>, <code>offers_enabled</code></div>
-        <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        <div id="dash-action-Marketing" style="margin-top:auto;">
+          <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        </div>
       </div>
 
       <!-- Service Improvement -->
@@ -1429,7 +1665,9 @@ details.tech-details summary {
           <span id="dash-updated-Service Improvement">Updated: —</span>
         </div>
         <div class="purpose-fields">Protected: <code>app_performance_ms</code>, <code>recent_error_count</code></div>
-        <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        <div id="dash-action-Service Improvement" style="margin-top:auto;">
+          <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        </div>
       </div>
     </div>
 
@@ -1688,6 +1926,49 @@ details.tech-details summary {
         </div>
       </div>
     </div>
+
+    <!-- Pseudocode View (Deliverable #3) -->
+    <details class="pseudocode-details" open style="margin-top:20px; background:var(--surface-card); border:1px solid var(--border-subtle); border-radius:8px; padding:16px 20px;">
+      <summary style="cursor:pointer; font-weight:700; font-size:13px; color:var(--text-primary); display:flex; align-items:center; justify-content:space-between; user-select:none;">
+        <span style="display:flex; align-items:center; gap:8px;">
+          <svg style="width:16px;height:16px;color:var(--cyan-400);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5"/></svg>
+          Policy Enforcement Point (PEP) Gatekeeper Algorithm — Pseudocode View
+        </span>
+        <span style="font-size:11px; font-weight:600; color:var(--text-muted); font-family:var(--font-mono);">PS-002 Deliverable #3</span>
+      </summary>
+      <div style="margin-top:10px; font-size:12px; color:var(--text-secondary); line-height:1.5;">
+        The downstream boundary operates as a strict Policy Enforcement Point (PEP). Every request must present active valid consent cryptographically anchored to the active privacy notice SHA-256 digest:
+      </div>
+      <pre class="pseudocode-box" style="margin-top:10px; background:var(--surface-subtle); border:1px solid var(--border-subtle); border-radius:6px; padding:14px; font-family:var(--font-mono); font-size:11.5px; line-height:1.6; color:var(--text-primary); overflow-x:auto;">
+FUNCTION EnforceDataAccess(userId, requestedPurpose):
+    // Step 1: Validate purpose against inventory
+    IF requestedPurpose NOT IN { "Analytics", "Marketing", "Service Improvement" }:
+        RETURN HTTP 400 ("Invalid Purpose")
+
+    // Step 2: Query active consent ledger
+    consentRecord = DB.Query("SELECT granted, notice_version FROM consents 
+                             WHERE user_id = ? AND purpose = ?", userId, requestedPurpose)
+
+    // Step 3: Fetch active privacy notice version &amp; SHA-256 digest
+    activeVersion, activeHash = System.GetNoticeMetadata()
+
+    // Step 4: Strict Policy Boundary Verification
+    IF consentRecord IS NULL:
+        LogAudit(userId, requestedPurpose, "data_access_denied", "Explicit opt-in required")
+        RETURN HTTP 403 ("Access Denied: No consent on record")
+
+    IF consentRecord.granted != 1:
+        LogAudit(userId, requestedPurpose, "data_access_denied", "Consent revoked/withdrawn")
+        RETURN HTTP 403 ("Access Denied: Consent withdrawn")
+
+    IF consentRecord.notice_version != activeVersion:
+        LogAudit(userId, requestedPurpose, "data_access_denied", "Notice version obsolete")
+        RETURN HTTP 403 ("Access Denied: Privacy notice changed; fresh consent required")
+
+    // Step 5: Authorization granted
+    LogAudit(userId, requestedPurpose, "data_access_allowed", "PEP verified active consent; SHA256=" + activeHash)
+    RETURN HTTP 200 (MOCK_DATA[requestedPurpose])</pre>
+    </details>
   </section>
 
   <!-- ==================== PAGE 4: ACTIVITY HISTORY ==================== -->
@@ -1725,10 +2006,10 @@ details.tech-details summary {
         </div>
 
         <div style="display:flex; gap:6px;">
-          <button class="btn btn-outline btn-sm" id="export-csv-button">CSV</button>
-          <button class="btn btn-outline btn-sm" id="export-json-button">JSON</button>
-          <button class="btn btn-primary btn-sm" id="verify-chain-button">Verify Integrity</button>
-          <button class="btn btn-danger-outline btn-sm" id="reset-demo-button">Reset Data</button>
+          <button class="btn btn-outline btn-sm" id="export-csv-button">Export CSV</button>
+          <button class="btn btn-outline btn-sm" id="export-json-button">Export JSON</button>
+          <button class="btn btn-primary btn-sm" id="verify-chain-button">Verify audit chain</button>
+          <button class="btn btn-danger-outline btn-sm" id="reset-demo-button">Reset demo data</button>
         </div>
       </div>
 
@@ -1861,6 +2142,43 @@ details.tech-details summary {
 
 </main>
 
+<!-- Universal App Footer -->
+<footer class="app-footer">
+  <div class="footer-inner">
+    Prototype only. Synthetic data. Technical consent evidence, not legal compliance certification.
+  </div>
+</footer>
+
+<!-- Guided PEP Enforcement Demo Modal -->
+<div id="guided-demo-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div>
+        <h3 style="font-size:15px; font-weight:800; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+          <svg style="width:16px;height:16px; color:var(--cyan-400);" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+          Guided PEP Enforcement Walkthrough
+        </h3>
+        <p style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">
+          Automated 8-stage verification: consent grant, downstream authorization, instant revocation, notice invalidation, and re-consent.
+        </p>
+      </div>
+      <button class="modal-close-btn" onclick="closeGuidedDemo()">✕</button>
+    </div>
+
+    <div class="modal-body" id="guided-demo-body">
+      <!-- Steps rendered dynamically -->
+    </div>
+
+    <div class="modal-footer">
+      <div id="guided-demo-summary" style="font-size:12px; font-weight:700;"></div>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-outline btn-sm" id="btn-restart-demo" onclick="startGuidedDemoExecution()" style="display:none;">↻ Re-run Demo</button>
+        <button class="btn btn-primary btn-sm" onclick="closeGuidedDemo()">Done &amp; Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Compact Toast Notification -->
 <div class="toast" id="toast" role="status" aria-live="polite">
   <span id="toast-icon">✓</span>
@@ -1881,7 +2199,7 @@ const state = {
   notice: null,
   notices: [],
   inFlight: false,
-  theme: localStorage.getItem('cg-theme') || 'dark'
+  theme: localStorage.getItem('cg-theme') || 'light'
 };
 
 function escapeHtml(val) {
@@ -1963,44 +2281,55 @@ function renderPurposes() {
 
   let activeCount = 0;
   let revokedCount = 0;
+  let notSetCount = 0;
 
   PURPOSES.forEach(purpose => {
     const consent = consentFor(purpose);
     const dashStatus = document.getElementById('dash-status-' + purpose);
     const dashNotice = document.getElementById('dash-notice-' + purpose);
     const dashUpdated = document.getElementById('dash-updated-' + purpose);
+    const dashAction = document.getElementById('dash-action-' + purpose);
     const manageStatus = document.getElementById('status-' + purpose);
     const reconsentAlert = document.getElementById('reconsent-container-' + purpose);
     const updatedEl = document.getElementById('updated-' + purpose);
 
-    let label = 'Not Granted', cls = 'not-granted';
-    let noticeText = `Active Notice: v${currentNoticeVer}`;
+    let label = 'Not Set', cls = 'not-granted';
+    let noticeText = 'No record · Not set';
     let isStale = false;
+    let timeString = 'Never';
+
+    if (consent && consent.updated_at) {
+      try {
+        const d = new Date(consent.updated_at);
+        timeString = isNaN(d) ? consent.updated_at : d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      } catch(e) {}
+    }
 
     if (consent && Number(consent.granted) === 1 && consent.notice_version !== currentNoticeVer) {
-      label = `Re-consent Needed (v${consent.notice_version})`;
+      label = `Re-consent required (v${consent.notice_version} -> v${currentNoticeVer})`;
       cls = 'stale';
       isStale = true;
-      noticeText = `Granted on v${consent.notice_version} (Current: v${currentNoticeVer})`;
-      revokedCount++;
+      noticeText = `Re-consent required (v${consent.notice_version} -> v${currentNoticeVer})`;
     } else if (consent && Number(consent.granted) === 1) {
-      label = `Active Consent (v${consent.notice_version})`;
+      label = `Notice v${consent.notice_version} · granted at ${timeString}`;
       cls = 'granted';
-      noticeText = `Notice: v${consent.notice_version} (Current)`;
+      noticeText = `Notice v${consent.notice_version} · granted at ${timeString}`;
       activeCount++;
     } else if (consent && consent.last_action === 'withdraw') {
       label = 'Consent Withdrawn';
       cls = 'withdrawn';
-      noticeText = `Withdrawn under v${consent.notice_version || currentNoticeVer}`;
+      noticeText = `Withdrawn under v${consent.notice_version || currentNoticeVer} · ${timeString}`;
       revokedCount++;
     } else if (consent && consent.last_action === 'deny') {
       label = 'Explicitly Denied';
       cls = 'denied';
-      noticeText = `Denied under v${consent.notice_version || currentNoticeVer}`;
+      noticeText = `Denied under v${consent.notice_version || currentNoticeVer} · ${timeString}`;
       revokedCount++;
     } else {
-      noticeText = `No consent recorded (Default: Denied)`;
-      revokedCount++;
+      label = 'Not Set';
+      cls = 'not-granted';
+      noticeText = 'No record · Not set';
+      notSetCount++;
     }
 
     if (dashStatus) {
@@ -2012,16 +2341,16 @@ function renderPurposes() {
       dashNotice.textContent = noticeText;
     }
 
-    let timeString = 'Never';
-    if (consent && consent.updated_at) {
-      try {
-        const d = new Date(consent.updated_at);
-        timeString = isNaN(d) ? consent.updated_at : d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-      } catch(e) {}
-    }
-
     if (dashUpdated) {
       dashUpdated.textContent = 'Updated: ' + timeString;
+    }
+
+    if (dashAction) {
+      if (isStale) {
+        dashAction.innerHTML = `<button class="btn btn-warning btn-block btn-sm" onclick="reconsentPurpose('${purpose}')">Re-consent to Notice v${currentNoticeVer}</button>`;
+      } else {
+        dashAction.innerHTML = `<button class="btn btn-outline btn-block btn-sm" onclick="switchPage('manage')">Manage Permission →</button>`;
+      }
     }
 
     if (manageStatus) {
@@ -2031,6 +2360,10 @@ function renderPurposes() {
 
     if (reconsentAlert) {
       reconsentAlert.className = 'reconsent-alert' + (isStale ? ' show' : '');
+      if (isStale && consent) {
+        reconsentAlert.innerHTML = `<span>⚠ <strong>Re-consent required (v${consent.notice_version} -> v${currentNoticeVer}):</strong> Privacy notice updated. Fresh opt-in required.</span>` +
+          `<button class="btn btn-warning btn-sm" onclick="reconsentPurpose('${purpose}')">Re-consent Under Notice v${currentNoticeVer}</button>`;
+      }
     }
 
     if (updatedEl) {
@@ -2040,6 +2373,10 @@ function renderPurposes() {
 
   document.getElementById('dash-active-count').textContent = activeCount + ' / 3';
   document.getElementById('dash-revoked-count').textContent = revokedCount;
+  const notSetEl = document.getElementById('dash-notset-count');
+  if (notSetEl) notSetEl.textContent = notSetCount;
+  const explicitEl = document.getElementById('dash-explicit-revoked');
+  if (explicitEl) explicitEl.textContent = revokedCount;
 
   // Real counts from audit ledger
   let allowedCount = 0;
@@ -2289,6 +2626,193 @@ async function setConsent(purpose, action) {
 
 async function reconsentPurpose(purpose) {
   await setConsent(purpose, 'grant');
+}
+
+// Guided PEP Lifecycle Demo (grant -> access 200 -> withdraw -> access 403 -> publish notice v2 -> old consent 403 -> re-consent v2 -> access 200)
+function openGuidedDemo() {
+  const modal = document.getElementById('guided-demo-modal');
+  if (modal) {
+    modal.style.display = 'flex';
+    startGuidedDemoExecution();
+  }
+}
+
+function closeGuidedDemo() {
+  const modal = document.getElementById('guided-demo-modal');
+  if (modal) modal.style.display = 'none';
+  refreshAll();
+}
+
+async function startGuidedDemoExecution() {
+  const body = document.getElementById('guided-demo-body');
+  const summary = document.getElementById('guided-demo-summary');
+  const restartBtn = document.getElementById('btn-restart-demo');
+  if (restartBtn) restartBtn.style.display = 'none';
+
+  const demoUser = 'demo-user';
+
+  const steps = [
+    {
+      title: "1. Grant Consent for Analytics (v1.0)",
+      desc: "Subject records explicit opt-in under Notice v1.0",
+      run: async () => {
+        await requestJson('/notice/reset', { method: 'POST' });
+        const { response, data } = await requestJson('/consents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics', action: 'grant' })
+        });
+        if (response.status !== 201 || !data.granted) throw new Error(`HTTP ${response.status}: Failed to grant`);
+        return { pass: true, detail: `HTTP 201 Created (granted=true, Notice v${data.notice_version})` };
+      }
+    },
+    {
+      title: "2. Downstream Data Access Allowed (HTTP 200)",
+      desc: "Downstream caller requests data; PEP verifies active consent and releases payload",
+      run: async () => {
+        const { response, data } = await requestJson('/data-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics' })
+        });
+        if (response.status !== 200 || !data.allowed) throw new Error(`HTTP ${response.status}: Expected allowed=true`);
+        return { pass: true, detail: `HTTP 200 OK (${data.reason_code}: Released 2 fields)` };
+      }
+    },
+    {
+      title: "3. Withdraw Consent",
+      desc: "Subject invokes right to withdraw; consent record flips to withdrawn",
+      run: async () => {
+        const { response, data } = await requestJson('/consents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics', action: 'withdraw' })
+        });
+        if (response.status !== 201 || data.granted) throw new Error(`HTTP ${response.status}: Expected withdrawn`);
+        return { pass: true, detail: `HTTP 201 Created (action=withdraw, ${data.reason_code})` };
+      }
+    },
+    {
+      title: "4. Downstream Data Access Denied (HTTP 403)",
+      desc: "Caller immediately re-requests data; PEP gatekeeper blocks access with 0 bytes released",
+      run: async () => {
+        const { response, data } = await requestJson('/data-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics' })
+        });
+        if (response.status !== 403 || data.allowed) throw new Error(`Expected HTTP 403 Forbidden`);
+        return { pass: true, detail: `HTTP 403 Forbidden (${data.reason_code}: ${data.reason})` };
+      }
+    },
+    {
+      title: "5. Publish Privacy Notice v2.0",
+      desc: "Controller updates privacy policy; new SHA-256 fingerprint computed",
+      run: async () => {
+        await requestJson('/notice/reset', { method: 'POST' });
+        await requestJson('/consents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics', action: 'grant' })
+        });
+        const { response, data } = await requestJson('/notice/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ notice_version: '2.0' })
+        });
+        if (response.status !== 200 || data.notice_version !== '2.0') throw new Error(`Failed to update notice`);
+        return { pass: true, detail: `HTTP 200 OK (Notice v2.0 active, SHA-256: ${data.notice_hash.slice(0, 10)}…)` };
+      }
+    },
+    {
+      title: "6. Prior Consent Rejected (HTTP 403 NOTICE_MISMATCH)",
+      desc: "Caller attempts data access; PEP blocks because consent was under v1.0, active notice is v2.0",
+      run: async () => {
+        const { response, data } = await requestJson('/data-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics' })
+        });
+        if (response.status !== 403 || data.reason_code !== 'NOTICE_MISMATCH') {
+          throw new Error(`Expected HTTP 403 NOTICE_MISMATCH, got ${response.status} ${data.reason_code}`);
+        }
+        return { pass: true, detail: `HTTP 403 Forbidden (NOTICE_MISMATCH: Fresh consent required)` };
+      }
+    },
+    {
+      title: "7. Re-consent Under Notice v2.0",
+      desc: "Subject reviews revised v2.0 terms and re-affirms opt-in",
+      run: async () => {
+        const { response, data } = await requestJson('/consents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics', action: 'grant' })
+        });
+        if (response.status !== 201 || data.notice_version !== '2.0') throw new Error(`Re-consent failed`);
+        return { pass: true, detail: `HTTP 201 Created (Granted on v2.0, ${data.reason_code})` };
+      }
+    },
+    {
+      title: "8. Downstream Access Restored (HTTP 200)",
+      desc: "Caller calls PEP; fresh v2.0 consent verified, data payload released",
+      run: async () => {
+        const { response, data } = await requestJson('/data-access', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: demoUser, purpose: 'Analytics' })
+        });
+        if (response.status !== 200 || !data.allowed) throw new Error(`Expected HTTP 200 Allowed`);
+        return { pass: true, detail: `HTTP 200 OK (${data.reason_code}: Released 2 fields)` };
+      }
+    }
+  ];
+
+  body.innerHTML = steps.map((s, i) => `
+    <div class="demo-step-row" id="demo-step-${i}">
+      <div class="demo-step-info">
+        <div class="demo-step-title">${escapeHtml(s.title)}</div>
+        <div class="demo-step-desc">${escapeHtml(s.desc)}</div>
+      </div>
+      <div class="demo-step-result">
+        <span class="status-badge not-granted" id="demo-badge-${i}">Pending</span>
+        <span class="demo-step-code" id="demo-code-${i}">—</span>
+      </div>
+    </div>
+  `).join('');
+
+  summary.textContent = 'Running step 1 of ' + steps.length + '…';
+
+  let passed = 0;
+  for (let i = 0; i < steps.length; i++) {
+    const badge = document.getElementById('demo-badge-' + i);
+    const code = document.getElementById('demo-code-' + i);
+    const row = document.getElementById('demo-step-' + i);
+
+    badge.className = 'status-badge stale';
+    badge.innerHTML = 'Executing…';
+    row.classList.add('running');
+
+    await new Promise(r => setTimeout(r, 350));
+
+    try {
+      const res = await steps[i].run();
+      badge.className = 'status-badge granted';
+      badge.textContent = 'PASS ✓';
+      code.textContent = res.detail;
+      passed++;
+    } catch(err) {
+      badge.className = 'status-badge denied';
+      badge.textContent = 'FAIL ✕';
+      code.textContent = err.message;
+    } finally {
+      row.classList.remove('running');
+    }
+    summary.textContent = `Completed ${i + 1} of ${steps.length} steps (${passed} Passed)…`;
+  }
+
+  summary.innerHTML = `<span style="color:${passed === steps.length ? 'var(--emerald-text)' : 'var(--rose-text)'}; font-weight:800;">✓ Guided Demo Completed: ${passed} of ${steps.length} Steps Passed</span>`;
+  if (restartBtn) restartBtn.style.display = 'inline-block';
+  await refreshAll();
 }
 
 async function simulateAccess() {
