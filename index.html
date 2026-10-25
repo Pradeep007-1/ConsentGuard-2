@@ -493,7 +493,7 @@ select option {
    ========================================================================== */
 
 main.container {
-  max-width: 1180px;
+  max-width: 1240px;
   margin: 20px auto 48px;
   padding: 0 20px;
   width: 100%;
@@ -543,12 +543,12 @@ main.container {
    Dashboard Components: Metrics, Cards, Feed, and Visuals
    ========================================================================== */
 
-/* 5 Metrics Cards Grid */
+/* 4 Compact Statistic Cards Grid */
 .metrics-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 18px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .metric-card {
@@ -1584,15 +1584,14 @@ footer.app-footer {
 
 /* Responsive adjustments */
 @media (max-width: 1024px) {
-  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
+  .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .purposes-grid { grid-template-columns: 1fr; }
   .activity-dashboard-row { grid-template-columns: 1fr; }
-  .overview-panels-grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 640px) {
   .metrics-grid { grid-template-columns: 1fr; }
-  .header-inner { flex-direction: column; height: auto; padding: 12px 16px; gap: 8px; }
+  .header-inner { flex-direction: column; height: auto; padding: 10px 16px; gap: 8px; }
   nav.nav-tabs { overflow-x: auto; width: 100%; }
 }
 </style>
@@ -1602,19 +1601,15 @@ footer.app-footer {
 <!-- Application Header -->
 <header class="app-header">
   <div class="header-inner">
-    <!-- Brand & Service Context -->
-    <div style="display:flex; align-items:center; gap:8px; flex-shrink:0;">
-      <a href="#dashboard" class="brand-wrapper" onclick="switchPage('dashboard')">
-        <div class="brand-shield">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
-        </div>
-        <div class="brand-title">
-          ConsentGuard <span class="brand-tag" title="Policy Enforcement Point">PEP</span>
-        </div>
-      </a>
-      <span class="header-chip team-chip" title="Hackathon Team & Problem Statement">Team SPARK · PS-002</span>
-      <span class="header-chip service-chip" title="Synthetic Protected Telehealth Service">HealthPulse Telehealth Portal</span>
-    </div>
+    <!-- Brand -->
+    <a href="#dashboard" class="brand-wrapper" onclick="switchPage('dashboard')">
+      <div class="brand-shield">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+      </div>
+      <div class="brand-title">
+        ConsentGuard
+      </div>
+    </a>
 
     <!-- Navigation Tabs -->
     <nav class="nav-tabs" aria-label="Main Navigation">
@@ -1640,18 +1635,12 @@ footer.app-footer {
       </button>
       <button class="nav-tab" data-page="diagnostics" onclick="switchPage('diagnostics')">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        Tests (14)
+        Tests
       </button>
     </nav>
 
     <!-- Header Actions -->
     <div class="header-actions">
-      <!-- Backend Status -->
-      <div class="status-indicator" id="backend-status-pill" title="Flask Backend Connection">
-        <span class="pulse-dot"></span>
-        <span id="backend-status-text">Online</span>
-      </div>
-
       <!-- User Selector (Accessible Custom Dropdown with Synchronized Hidden Select) -->
       <div class="custom-dropdown" id="user-custom-dropdown">
         <button type="button" class="custom-dropdown-btn" id="user-dropdown-btn" aria-haspopup="listbox" aria-expanded="false" aria-label="Select Active Subject User">
@@ -1710,11 +1699,7 @@ footer.app-footer {
         </h2>
         <p>Purpose-based data access control engine. Every downstream request is evaluated in real-time against hash-chained consent records.</p>
       </div>
-      <div style="display:flex; gap:8px; align-items:center;">
-        <button class="btn btn-primary" id="btn-run-guided-demo" onclick="openGuidedDemo()">
-          <svg style="width:14px; height:14px;" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          Run Guided Demo
-        </button>
+      <div>
         <button class="btn btn-outline" onclick="switchPage('simulator')">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
           Test Access Simulator →
@@ -1722,7 +1707,7 @@ footer.app-footer {
       </div>
     </div>
 
-    <!-- Section C: Metrics Row (5 Cards) -->
+    <!-- Section C: 4 Compact Statistic Cards -->
     <div class="metrics-grid">
       <div class="metric-card">
         <span class="m-label">Active Consents</span>
@@ -1730,19 +1715,14 @@ footer.app-footer {
         <span class="m-sub">Opted-in for active user</span>
       </div>
       <div class="metric-card">
-        <span class="m-label">Revoked / Denied</span>
-        <span class="m-number rose" id="dash-revoked-count">0</span>
-        <span class="m-sub">Explicit: <span id="dash-explicit-revoked">0</span> · Not set: <span id="dash-notset-count">3</span></span>
-      </div>
-      <div class="metric-card">
         <span class="m-label">Requests Allowed</span>
         <span class="m-number cyan" id="dash-allowed-count">—</span>
-        <span class="m-sub" title="Policy Enforcement Point">PEP HTTP 200 releases</span>
+        <span class="m-sub">PEP HTTP 200 releases</span>
       </div>
       <div class="metric-card">
         <span class="m-label">Requests Blocked</span>
         <span class="m-number rose" id="dash-blocked-count">—</span>
-        <span class="m-sub" title="Policy Enforcement Point">PEP HTTP 403 blocks</span>
+        <span class="m-sub">PEP HTTP 403 blocks</span>
       </div>
       <div class="metric-card">
         <span class="m-label">Audit Integrity</span>
@@ -1884,37 +1864,6 @@ footer.app-footer {
             Unauthorized requests are blocked at the gateway level with 0ms latency. No protected fields or PII ever reach unverified downstream consumers.
           </div>
         </div>
-      </div>
-    </div>
-
-    <!-- Section G: Security & Policy Overview (2 Panels) -->
-    <div class="overview-panels-grid">
-      <div class="overview-card">
-        <div class="overview-card-header">
-          <span class="overview-card-title">
-            <svg style="width:16px;height:16px;color:var(--cyan-400);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
-            Active Privacy Notice
-          </span>
-          <strong id="dash-notice-ver" style="color:var(--cyan-400);">Version 1.0</strong>
-        </div>
-        <p class="overview-card-text">
-          Consent is cryptographically tethered to the active notice digest. Updating terms immediately invalidates prior consent, enforcing mandatory opt-in.
-        </p>
-        <button class="link-btn" onclick="switchPage('notice')">Inspect Active Notice &amp; Hash →</button>
-      </div>
-
-      <div class="overview-card">
-        <div class="overview-card-header">
-          <span class="overview-card-title">
-            <svg style="width:16px;height:16px;color:var(--emerald-400);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
-            Cryptographic Audit Chain
-          </span>
-          <strong style="color:var(--emerald-text);">100% Intact</strong>
-        </div>
-        <p class="overview-card-text">
-          Audit events form an immutable SHA-256 hash chain: <code>row_hash = sha256(prev_hash + user + action + purpose + timestamp)</code>.
-        </p>
-        <button class="link-btn" onclick="switchPage('history')">Verify Ledger Integrity →</button>
       </div>
     </div>
   </section>
@@ -2514,8 +2463,10 @@ function renderPurposes() {
     }
   });
 
-  document.getElementById('dash-active-count').textContent = activeCount + ' / 3';
-  document.getElementById('dash-revoked-count').textContent = revokedCount;
+  const activeCountEl = document.getElementById('dash-active-count');
+  if (activeCountEl) activeCountEl.textContent = activeCount + ' / 3';
+  const revokedEl = document.getElementById('dash-revoked-count');
+  if (revokedEl) revokedEl.textContent = revokedCount;
   const notSetEl = document.getElementById('dash-notset-count');
   if (notSetEl) notSetEl.textContent = notSetCount;
   const explicitEl = document.getElementById('dash-explicit-revoked');
@@ -2691,8 +2642,10 @@ async function refreshAll() {
     ]);
 
     if (healthRes.response.ok) {
-      document.getElementById('backend-status-pill').style.borderColor = 'var(--emerald-border)';
-      document.getElementById('backend-status-text').textContent = 'Online';
+      const bPill = document.getElementById('backend-status-pill');
+      if (bPill) bPill.style.borderColor = 'var(--emerald-border)';
+      const bText = document.getElementById('backend-status-text');
+      if (bText) bText.textContent = 'Online';
     }
 
     state.consents = consentsRes.data || [];
@@ -2701,11 +2654,16 @@ async function refreshAll() {
     if (noticeRes.data) {
       state.notice = noticeRes.data;
       const verText = 'v' + state.notice.notice_version;
-      document.getElementById('header-notice-pill').textContent = verText;
-      document.getElementById('dash-notice-ver').textContent = 'Version ' + state.notice.notice_version;
-      document.getElementById('notice-version').textContent = verText;
-      document.getElementById('notice-hash').textContent = state.notice.notice_hash || '—';
-      document.getElementById('notice-text').textContent = state.notice.notice_text || '';
+      const hPill = document.getElementById('header-notice-pill');
+      if (hPill) hPill.textContent = verText;
+      const dNotice = document.getElementById('dash-notice-ver');
+      if (dNotice) dNotice.textContent = 'Version ' + state.notice.notice_version;
+      const nVer = document.getElementById('notice-version');
+      if (nVer) nVer.textContent = verText;
+      const nHash = document.getElementById('notice-hash');
+      if (nHash) nHash.textContent = state.notice.notice_hash || '—';
+      const nText = document.getElementById('notice-text');
+      if (nText) nText.textContent = state.notice.notice_text || '';
     }
 
     if (noticesRes.data) {
@@ -2716,8 +2674,10 @@ async function refreshAll() {
     renderPurposes();
     renderAudit();
   } catch(error) {
-    document.getElementById('backend-status-pill').style.borderColor = 'var(--rose-border)';
-    document.getElementById('backend-status-text').textContent = 'Offline';
+    const bPill = document.getElementById('backend-status-pill');
+    if (bPill) bPill.style.borderColor = 'var(--rose-border)';
+    const bText = document.getElementById('backend-status-text');
+    if (bText) bText.textContent = 'Offline';
     showToast('Could not connect to Flask backend on port 5001.', true);
   }
 }
