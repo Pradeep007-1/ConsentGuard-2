@@ -774,7 +774,7 @@ body::before {
     <select id="sim-purpose">
         <option value="Analytics">Analytics</option>
         <option value="Marketing">Marketing</option>
-        <option value="Third-Party Sharing">Third-Party Sharing</option>
+        <option value="Service Improvement">Service Improvement</option>
     </select>
     <button onclick="simulateAccess()">Test Data Access</button>
     <p id="sim-result">Waiting for test...</p>
@@ -1069,11 +1069,9 @@ const denied = events.filter(e => e.action === 'data_access_denied').length;
 }
 
 loadSecurityOverview(); 
-</script>
-
-
-
-
+<footer style="margin-top:30px;padding:16px 20px;border-top:1px solid var(--border);color:var(--muted);font-size:11px;text-align:center;background:#fff">
+    Prototype only. Synthetic data. Technical consent evidence, not legal compliance certification.
+</footer>
 
 </body>
 </html>

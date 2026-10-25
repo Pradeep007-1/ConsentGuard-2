@@ -1,44 +1,16 @@
+import sys
+from pathlib import Path
 
-from flask import Flask, jsonify, send_file
+# Ensure backend directory is in python search path
+ROOT_DIR = Path(__file__).resolve().parent
+BACKEND_DIR = ROOT_DIR / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
-app = Flask(__name__)
-
-
-@app.route("/")
-def home():
-    return send_file("dashboard.html")
-
-
-@app.route("/api/health")
-def health():
-    return jsonify({
-        "status": "working",
-        "project": "ConsentGuard"
-    })
-@app.route("/api/consent", methods=["POST"])
-def save_consent():
-    from flask import request
-
-    data = request.get_json()
-
-    if not data or data.get("purpose") not in [
-        "Analytics", "Marketing", "Third-Party Sharing"
-    ]:
-        return jsonify({"error": "Invalid purpose"}), 400
-
-    if data.get("status") not in ["Granted", "Denied", "Withdrawn"]:
-        return jsonify({"error": "Invalid status"}), 400
-
-    print("Consent decision:", data)
-
-    return jsonify({
-        "message": "Consent decision received",
-        "purpose": data["purpose"],
-        "status": data["status"]
-    })
-
-
-
+from api import app, initialize_database, load_active_notice
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    initialize_database()
+    load_active_notice()
+    print("ConsentGuard backend running on http://127.0.0.1:5001")
+    app.run(host="0.0.0.0", port=5001, debug=False, threaded=True)

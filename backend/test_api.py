@@ -1,8 +1,15 @@
 
-import unittest
+import os
+import sys
 import tempfile
+import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+# Ensure backend directory is in python search path
+CURRENT_DIR = Path(__file__).resolve().parent
+if str(CURRENT_DIR) not in sys.path:
+    sys.path.insert(0, str(CURRENT_DIR))
 
 import api
 import database
@@ -94,6 +101,12 @@ class ConsentGuardTests(unittest.TestCase):
         self.assertEqual(self.access("Analytics").status_code, 200)
         self.assertEqual(self.access("Marketing").status_code, 403)
 
+    def test_service_improvement_consent(self):
+        response = self.post_consent(
+            "Service Improvement", "grant"
+        )
+        self.assertEqual(response.status_code, 201)
+
     def test_third_party_consent(self):
         response = self.post_consent(
             "Third-Party Sharing", "grant"
@@ -134,14 +147,35 @@ class ConsentGuardTests(unittest.TestCase):
 
     def test_old_notice_consent_is_rejected(self):
         self.post_consent("Analytics", "grant")
-
-        original_version = api.NOTICE_VERSION
         try:
-            api.NOTICE_VERSION = "2.0"
+            self.client.post("/api/notice/update", json={"notice_version": "2.0"})
             response = self.access("Analytics")
             self.assertEqual(response.status_code, 403)
         finally:
-            api.NOTICE_VERSION = original_version
+            self.client.post("/api/notice/reset")
+
+    def test_dynamic_notice_update_and_reset(self):
+        # 1. Grant under Notice 1.0
+        self.post_consent("Analytics", "grant")
+        self.assertEqual(self.access("Analytics").status_code, 200)
+
+        try:
+            # 2. Update notice to 2.0 via API
+            update_res = self.client.post("/api/notice/update", json={"notice_version": "2.0"})
+            self.assertEqual(update_res.status_code, 200)
+            self.assertEqual(update_res.json["notice_version"], "2.0")
+
+            # 3. Access must now be denied due to stale notice
+            access_res = self.access("Analytics")
+            self.assertEqual(access_res.status_code, 403)
+            self.assertIn("notice", access_res.json.get("reason", "").lower())
+
+            # 4. Re-consent on 2.0 should restore access
+            self.post_consent("Analytics", "grant")
+            self.assertEqual(self.access("Analytics").status_code, 200)
+        finally:
+            self.client.post("/api/notice/reset")
+            self.assertEqual(api.NOTICE_VERSION, "1.0")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

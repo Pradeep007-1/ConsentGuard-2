@@ -1,0 +1,23 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.13.2, pytest-9.1.1, pluggy-1.7.0 -- C:\Program Files\Python313\python.exe
+cachedir: .pytest_cache
+rootdir: D:\CONSENT\ConsentGuard
+collecting ... collected 15 items
+
+tests/test_consent.py::test_01_access_without_consent_is_denied PASSED   [  6%]
+tests/test_consent.py::test_02_granting_consent_permits_access_for_granted_purpose PASSED [ 13%]
+tests/test_consent.py::test_03_consent_for_one_purpose_does_not_authorize_another PASSED [ 20%]
+tests/test_consent.py::test_04_denying_consent_blocks_access PASSED      [ 26%]
+tests/test_consent.py::test_05_withdrawing_consent_blocks_subsequent_access PASSED [ 33%]
+tests/test_consent.py::test_06_other_purposes_remain_unaffected_by_withdrawal PASSED [ 40%]
+tests/test_consent.py::test_07_changing_notice_version_invalidates_stale_consent PASSED [ 46%]
+tests/test_consent.py::test_08_fresh_consent_under_current_notice_permits_access PASSED [ 53%]
+tests/test_consent.py::test_09_unknown_purposes_are_rejected PASSED      [ 60%]
+tests/test_consent.py::test_10_unknown_users_or_missing_consent_handled_safely PASSED [ 66%]
+tests/test_consent.py::test_11_audit_records_created_for_important_actions PASSED [ 73%]
+tests/test_consent.py::test_12_notice_hashes_calculated_and_verified_correctly PASSED [ 80%]
+tests/test_consent.py::test_13_repeated_access_requests_enforce_latest_consent_state PASSED [ 86%]
+tests/test_consent.py::test_14_audit_export_returns_valid_records PASSED [ 93%]
+tests/test_consent.py::test_15_audit_hash_chain_intact_and_verifiable PASSED [100%]
+
+============================= 15 passed in 1.16s ==============================
