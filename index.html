@@ -9,12 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ==========================================================================
-   ConsentGuard Design System (Fit-To-Frame Executive Cybersecurity Architecture)
+   ConsentGuard Design System (Cybersecurity SaaS Dashboard)
    ========================================================================== */
 
 :root {
-  /* Dark Theme (Default) */
-  --bg-canvas: #080d16;
+  /* Dark Cybersecurity Theme (Default) */
+  --bg-canvas: #070c16;
+  --bg-grid: rgba(56, 189, 248, 0.025);
   --surface-main: #0c1424;
   --surface-card: #101a2f;
   --surface-card-hover: #14223d;
@@ -24,15 +25,19 @@
   --border-subtle: #1c2b48;
   --border-medium: #273b61;
   --border-focus: #38bdf8;
+  --border-glow: rgba(56, 189, 248, 0.2);
 
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   --text-muted: #64748b;
+  --text-dim: #475569;
 
+  /* Accents */
   --cyan-400: #38bdf8;
   --cyan-500: #0ea5e9;
   --cyan-glow: rgba(14, 165, 233, 0.15);
 
+  /* Status Colors */
   --emerald-400: #34d399;
   --emerald-bg: rgba(16, 185, 129, 0.12);
   --emerald-border: rgba(16, 185, 129, 0.3);
@@ -54,6 +59,7 @@
 
 [data-theme="light"] {
   --bg-canvas: #f8fafc;
+  --bg-grid: rgba(14, 165, 233, 0.02);
   --surface-main: #ffffff;
   --surface-card: #ffffff;
   --surface-card-hover: #f1f5f9;
@@ -67,6 +73,7 @@
   --text-primary: #0f172a;
   --text-secondary: #334155;
   --text-muted: #64748b;
+  --text-dim: #94a3b8;
 
   --emerald-bg: #ecfdf5;
   --emerald-border: #a7f3d0;
@@ -81,7 +88,7 @@
   --amber-text: #92400e;
 }
 
-/* Global Reset & Prevent Horizontal Scroll */
+/* Global Reset & Base */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -94,67 +101,72 @@ html, body {
   overflow-x: hidden;
   font-family: var(--font);
   background-color: var(--bg-canvas);
+  background-image: 
+    linear-gradient(to right, var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--bg-grid) 1px, transparent 1px);
+  background-size: 28px 28px;
   color: var(--text-primary);
-  line-height: 1.45;
+  line-height: 1.5;
   font-size: 13.5px;
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
 /* ==========================================================================
-   Header: Compact, Fluid, Zero-Overflow
+   Header Navigation: Responsive, Compact, Zero-Overflow
    ========================================================================== */
 
 header.app-header {
-  height: 54px;
+  height: 56px;
   background: var(--surface-main);
   border-bottom: 1px solid var(--border-subtle);
   position: sticky;
   top: 0;
   z-index: 1000;
   width: 100%;
+  backdrop-filter: blur(8px);
 }
 
 .header-inner {
-  max-width: 1080px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 0 16px;
-  height: 54px;
+  padding: 0 20px;
+  height: 56px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
 }
 
-/* Brand */
 .brand-wrapper {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   text-decoration: none;
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .brand-shield {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 6px;
   background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
   display: grid;
   place-items: center;
   color: #fff;
   flex-shrink: 0;
-  box-shadow: 0 0 10px rgba(14, 165, 233, 0.3);
+  box-shadow: 0 0 12px rgba(14, 165, 233, 0.3);
 }
 
 .brand-shield svg {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
 }
 
 .brand-title {
-  font-size: 15px;
+  font-size: 15.5px;
   font-weight: 800;
   letter-spacing: -0.3px;
   color: var(--text-primary);
@@ -170,7 +182,7 @@ header.app-header {
   font-weight: 700;
   color: var(--cyan-400);
   background: var(--cyan-glow);
-  padding: 1px 5px;
+  padding: 1px 6px;
   border-radius: 4px;
   border: 1px solid rgba(56, 189, 248, 0.25);
 }
@@ -179,10 +191,10 @@ header.app-header {
 nav.nav-tabs {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   background: var(--surface-subtle);
-  padding: 2px;
-  border-radius: 6px;
+  padding: 3px;
+  border-radius: 7px;
   border: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -190,10 +202,10 @@ nav.nav-tabs {
 .nav-tab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 4px;
-  font-size: 11.5px;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-muted);
   background: transparent;
@@ -205,19 +217,21 @@ nav.nav-tabs {
 }
 
 .nav-tab svg {
-  width: 12px;
-  height: 12px;
+  width: 13px;
+  height: 13px;
   opacity: 0.8;
 }
 
 .nav-tab:hover {
   color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .nav-tab.active {
   color: #ffffff;
   background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
   border-color: rgba(56, 189, 248, 0.35);
+  box-shadow: 0 1px 6px rgba(14, 165, 233, 0.2);
 }
 
 .nav-tab.active svg {
@@ -228,15 +242,15 @@ nav.nav-tabs {
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 7px;
+  gap: 6px;
+  padding: 4px 8px;
   border-radius: 5px;
   font-size: 11px;
   font-weight: 600;
@@ -251,6 +265,7 @@ nav.nav-tabs {
   height: 6px;
   border-radius: 50%;
   background: var(--emerald-400);
+  box-shadow: 0 0 6px var(--emerald-400);
 }
 
 .user-selector-pill {
@@ -260,7 +275,7 @@ nav.nav-tabs {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 5px;
-  padding: 3px 7px;
+  padding: 3px 8px;
   font-size: 11.5px;
 }
 
@@ -277,9 +292,9 @@ nav.nav-tabs {
 
 .notice-pill {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 700;
-  padding: 4px 7px;
+  padding: 4px 8px;
   border-radius: 5px;
   background: var(--cyan-glow);
   color: var(--cyan-400);
@@ -291,13 +306,19 @@ nav.nav-tabs {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   color: var(--text-secondary);
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   border-radius: 5px;
   display: grid;
   place-items: center;
   cursor: pointer;
   outline: none;
+  transition: all 0.15s;
+}
+
+.theme-btn:hover {
+  color: var(--cyan-400);
+  border-color: var(--border-medium);
 }
 
 .theme-btn svg {
@@ -306,13 +327,13 @@ nav.nav-tabs {
 }
 
 /* ==========================================================================
-   Main Container & Page Switching (Fit-In-One-Frame)
+   Main Container Layout
    ========================================================================== */
 
 main.container {
-  max-width: 1080px;
-  margin: 14px auto 30px;
-  padding: 0 16px;
+  max-width: 1180px;
+  margin: 20px auto 48px;
+  padding: 0 20px;
   width: 100%;
 }
 
@@ -322,7 +343,7 @@ main.container {
 
 .app-page.active {
   display: block;
-  animation: fadeIn 0.18s ease-in-out;
+  animation: fadeIn 0.2s ease-in-out;
 }
 
 @keyframes fadeIn {
@@ -330,21 +351,18 @@ main.container {
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ==========================================================================
-   Dashboard: Clean, Compact, One-Frame Control Center
-   ========================================================================== */
-
-/* Top Action Bar */
-.dash-top-bar {
+/* Page Headers */
+.page-header-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
 }
 
-.dash-heading h2 {
-  font-size: 18px;
+.page-header-text h2 {
+  font-size: 20px;
   font-weight: 800;
   letter-spacing: -0.3px;
   color: var(--text-primary);
@@ -353,98 +371,99 @@ main.container {
   gap: 8px;
 }
 
-.badge-pep {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  background: var(--emerald-bg);
-  color: var(--emerald-text);
-  border: 1px solid var(--emerald-border);
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.dash-heading p {
-  font-size: 12.5px;
+.page-header-text p {
+  font-size: 13px;
   color: var(--text-muted);
+  margin-top: 2px;
 }
 
-/* Compact Metrics Bar */
-.metrics-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+/* ==========================================================================
+   Dashboard Components: Metrics, Cards, Feed, and Visuals
+   ========================================================================== */
+
+/* 5 Metrics Cards Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.metric-card {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 10px 18px;
-  margin-bottom: 14px;
-  gap: 12px;
-}
-
-.metric-item {
+  padding: 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 4px;
+  transition: transform 0.15s, border-color 0.15s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.m-lbl {
-  font-size: 10.5px;
+.metric-card:hover {
+  border-color: var(--border-medium);
+  transform: translateY(-1px);
+}
+
+.m-label {
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.4px;
   color: var(--text-muted);
 }
 
-.m-val {
+.m-number {
   font-family: var(--font-mono);
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   line-height: 1.2;
 }
 
-.m-val.green { color: var(--emerald-text); }
-.m-val.rose { color: var(--rose-text); }
-.m-val.cyan { color: var(--cyan-400); }
+.m-number.green { color: var(--emerald-text); }
+.m-number.rose { color: var(--rose-text); }
+.m-number.cyan { color: var(--cyan-400); }
 
-.m-divider {
-  width: 1px;
-  height: 28px;
-  background: var(--border-subtle);
+.m-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
 }
 
-/* 3 Purpose Cards (Compact Grid) */
+/* 3 Purpose Consent Cards */
 .purposes-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
+  gap: 16px;
+  margin-bottom: 22px;
 }
 
-.p-card {
+.purpose-card {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 16px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  transition: border-color 0.15s;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.p-card:hover {
+.purpose-card:hover {
   border-color: var(--border-medium);
 }
 
-.p-card-top {
+.purpose-card-top {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
-.p-icon {
-  width: 32px;
-  height: 32px;
+.purpose-icon {
+  width: 36px;
+  height: 36px;
   border-radius: 6px;
   background: var(--surface-elevated);
   border: 1px solid var(--border-subtle);
@@ -453,38 +472,47 @@ main.container {
   color: var(--cyan-400);
 }
 
-.p-icon svg {
-  width: 17px;
-  height: 17px;
+.purpose-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
-.p-title {
-  font-size: 15px;
+.purpose-title {
+  font-size: 16px;
   font-weight: 800;
   color: var(--text-primary);
   margin-bottom: 4px;
 }
 
-.p-desc {
-  font-size: 12px;
+.purpose-desc {
+  font-size: 12.5px;
   color: var(--text-secondary);
-  line-height: 1.45;
-  margin-bottom: 10px;
+  line-height: 1.5;
+  margin-bottom: 12px;
   flex: 1;
 }
 
-.p-fields {
+.purpose-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.purpose-fields {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 11px;
   color: var(--text-muted);
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 4px;
-  padding: 3px 6px;
-  margin-bottom: 12px;
+  padding: 4px 8px;
+  margin-bottom: 14px;
 }
 
-.p-fields code {
+.purpose-fields code {
   color: var(--cyan-400);
 }
 
@@ -514,6 +542,10 @@ main.container {
   border: 1px solid var(--emerald-border);
 }
 
+.status-badge.granted::before {
+  box-shadow: 0 0 5px var(--emerald-400);
+}
+
 .status-badge.not-granted, 
 .status-badge.withdrawn, 
 .status-badge.denied {
@@ -522,45 +554,207 @@ main.container {
   border: 1px solid var(--rose-border);
 }
 
+.status-badge.not-granted::before,
+.status-badge.withdrawn::before,
+.status-badge.denied::before {
+  box-shadow: 0 0 5px var(--rose-400);
+}
+
 .status-badge.stale {
   background: var(--amber-bg);
   color: var(--amber-text);
   border: 1px solid var(--amber-border);
 }
 
-/* Bottom Compact Strip (2 Cards) */
-.bottom-row {
+/* Section E & F: Access Activity Stream & Ratio Visualization */
+.activity-dashboard-row {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+  margin-bottom: 22px;
 }
 
-.info-card {
+.dashboard-panel {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 14px 16px;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 4px;
 }
 
-.info-card-header {
+.panel-head {
+  padding: 12px 18px;
+  background: var(--surface-subtle);
+  border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.info-card-title {
-  font-size: 13px;
+.panel-head h3 {
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 7px;
 }
 
-.info-card-text {
+.panel-head h3 svg {
+  width: 15px;
+  height: 15px;
+  color: var(--cyan-400);
+}
+
+/* Recent Requests Feed Table */
+table.feed-table {
+  width: 100%;
+  border-collapse: collapse;
   font-size: 12px;
+  text-align: left;
+}
+
+table.feed-table th {
+  padding: 9px 14px;
+  font-weight: 700;
   color: var(--text-muted);
-  line-height: 1.4;
+  font-size: 11px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-subtle);
+}
+
+table.feed-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  vertical-align: middle;
+}
+
+table.feed-table tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.feed-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+
+.feed-badge.allow {
+  background: var(--emerald-bg);
+  color: var(--emerald-text);
+  border: 1px solid var(--emerald-border);
+}
+
+.feed-badge.deny {
+  background: var(--rose-bg);
+  color: var(--rose-text);
+  border: 1px solid var(--rose-border);
+}
+
+/* Access Visualization Breakdown Panel */
+.viz-panel-content {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.progress-track {
+  width: 100%;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  display: flex;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.bar-segment.allowed {
+  background: linear-gradient(90deg, #10b981, #34d399);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.bar-segment.blocked {
+  background: linear-gradient(90deg, #f43f5e, #fb7185);
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.viz-stats-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.viz-stat-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.stat-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.stat-legend-dot.green { background: var(--emerald-400); }
+.stat-legend-dot.rose { background: var(--rose-400); }
+
+.viz-card-meta {
+  background: var(--surface-subtle);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.45;
+}
+
+/* Section G: Bottom Security & Policy Overview */
+.overview-panels-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.overview-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.overview-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.overview-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.overview-card-text {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
 }
 
 .link-btn {
@@ -572,7 +766,8 @@ main.container {
   cursor: pointer;
   text-align: left;
   padding: 0;
-  margin-top: 4px;
+  margin-top: 6px;
+  width: fit-content;
 }
 
 .link-btn:hover {
@@ -588,7 +783,7 @@ main.container {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 13px;
+  padding: 7px 14px;
   border-radius: 6px;
   font-size: 12.5px;
   font-weight: 600;
@@ -651,27 +846,12 @@ main.container {
    Page 2: Manage Consent
    ========================================================================== */
 
-.page-head {
-  margin-bottom: 16px;
-}
-
-.page-head h2 {
-  font-size: 18px;
-  font-weight: 800;
-  letter-spacing: -0.3px;
-}
-
-.page-head p {
-  font-size: 12.5px;
-  color: var(--text-muted);
-}
-
 .manage-consent-card {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 12px;
+  padding: 18px 22px;
+  margin-bottom: 14px;
 }
 
 .manage-consent-header {
@@ -680,13 +860,13 @@ main.container {
   align-items: center;
   margin-bottom: 8px;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .manage-consent-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 .manage-consent-title h3 {
@@ -699,10 +879,10 @@ main.container {
   justify-content: space-between;
   align-items: center;
   border-top: 1px solid var(--border-subtle);
-  padding-top: 12px;
-  margin-top: 12px;
+  padding-top: 14px;
+  margin-top: 14px;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
 }
 
 .last-updated-text {
@@ -739,7 +919,7 @@ main.container {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 22px;
+  padding: 24px;
   max-width: 820px;
   margin: 0 auto;
 }
@@ -747,8 +927,8 @@ main.container {
 .simulator-form {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  margin: 14px 0;
+  gap: 16px;
+  margin: 16px 0;
 }
 
 .form-group label {
@@ -762,7 +942,7 @@ main.container {
 
 .form-group select {
   width: 100%;
-  padding: 8px 10px;
+  padding: 9px 12px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
   background: var(--surface-elevated);
@@ -775,8 +955,8 @@ main.container {
 .result-display {
   display: none;
   border-radius: 8px;
-  padding: 16px 20px;
-  margin-top: 16px;
+  padding: 18px 22px;
+  margin-top: 18px;
 }
 
 .result-display.allowed {
@@ -810,7 +990,7 @@ main.container {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
-  padding: 2px 7px;
+  padding: 3px 8px;
   border-radius: 4px;
   background: rgba(0,0,0,0.3);
 }
@@ -818,7 +998,7 @@ main.container {
 .security-boundary-badge {
   font-size: 11.5px;
   font-weight: 700;
-  padding: 3px 8px;
+  padding: 4px 9px;
   border-radius: 4px;
   display: inline-block;
   margin-bottom: 10px;
@@ -863,7 +1043,7 @@ main.container {
 }
 
 .table-toolbar {
-  padding: 12px 16px;
+  padding: 12px 18px;
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   gap: 10px;
@@ -881,7 +1061,7 @@ main.container {
 }
 
 .toolbar-filters input, .toolbar-filters select {
-  padding: 6px 9px;
+  padding: 6px 10px;
   border-radius: 5px;
   border: 1px solid var(--border-subtle);
   font-size: 12px;
@@ -905,7 +1085,7 @@ table.activity-table {
 
 table.activity-table th {
   background: var(--surface-subtle);
-  padding: 9px 14px;
+  padding: 10px 16px;
   font-weight: 700;
   color: var(--text-muted);
   font-size: 11px;
@@ -915,14 +1095,14 @@ table.activity-table th {
 }
 
 table.activity-table td {
-  padding: 10px 14px;
+  padding: 11px 16px;
   border-bottom: 1px solid var(--border-subtle);
   vertical-align: middle;
 }
 
 .action-pill {
   display: inline-block;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 4px;
   font-size: 10.5px;
   font-weight: 700;
@@ -949,7 +1129,7 @@ table.activity-table td {
 
 #chain-verify-banner {
   display: none;
-  padding: 10px 16px;
+  padding: 10px 18px;
   font-weight: 700;
   font-size: 12px;
   border-bottom: 1px solid var(--border-subtle);
@@ -963,18 +1143,18 @@ table.activity-table td {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 20px;
+  padding: 24px;
 }
 
 .notice-text-content {
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  padding: 14px;
-  font-size: 12.5px;
-  line-height: 1.55;
+  padding: 16px;
+  font-size: 13px;
+  line-height: 1.6;
   white-space: pre-wrap;
-  margin: 12px 0;
+  margin: 14px 0;
 }
 
 .hash-container {
@@ -989,7 +1169,7 @@ table.activity-table td {
   font-size: 11px;
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
-  padding: 7px 10px;
+  padding: 8px 12px;
   border-radius: 5px;
   word-break: break-all;
   color: var(--cyan-400);
@@ -1000,8 +1180,8 @@ details.tech-details {
   background: var(--surface-subtle);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  padding: 10px 14px;
-  margin-top: 14px;
+  padding: 12px 16px;
+  margin-top: 16px;
   font-size: 12px;
 }
 
@@ -1019,27 +1199,27 @@ details.tech-details summary {
   background: var(--surface-card);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
-  padding: 20px;
+  padding: 24px;
 }
 
 .test-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 14px;
-  padding-bottom: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
 /* Toast */
 .toast {
   position: fixed;
-  bottom: 20px;
-  right: 20px;
+  bottom: 24px;
+  right: 24px;
   background: var(--surface-elevated);
   border: 1px solid var(--border-medium);
   color: var(--text-primary);
-  padding: 10px 16px;
+  padding: 12px 18px;
   border-radius: 6px;
   font-size: 12.5px;
   font-weight: 600;
@@ -1051,6 +1231,7 @@ details.tech-details summary {
   pointer-events: none;
   transform: translateY(10px);
   transition: all 0.2s ease;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.4);
 }
 
 .toast.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
@@ -1058,17 +1239,23 @@ details.tech-details summary {
 .toast.error { border-color: var(--rose-border); background: #881337; color: #fecdd3; }
 
 /* Responsive adjustments */
-@media (max-width: 900px) {
+@media (max-width: 1024px) {
+  .metrics-grid { grid-template-columns: repeat(3, 1fr); }
   .purposes-grid { grid-template-columns: 1fr; }
-  .bottom-row { grid-template-columns: 1fr; }
-  .metrics-bar { flex-wrap: wrap; }
-  .simulator-form { grid-template-columns: 1fr; }
+  .activity-dashboard-row { grid-template-columns: 1fr; }
+  .overview-panels-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 768px) {
+  .metrics-grid { grid-template-columns: 1fr; }
+  .header-inner { flex-direction: column; height: auto; padding: 12px 16px; gap: 8px; }
+  nav.nav-tabs { overflow-x: auto; width: 100%; }
 }
 </style>
 </head>
 <body>
 
-<!-- Application Header: Compact & Zero-Overflow -->
+<!-- Application Header -->
 <header class="app-header">
   <div class="header-inner">
     <!-- Brand -->
@@ -1081,7 +1268,7 @@ details.tech-details summary {
       </div>
     </a>
 
-    <!-- Navigation Tabs (Concise labels) -->
+    <!-- Navigation Tabs -->
     <nav class="nav-tabs" aria-label="Main Navigation">
       <button class="nav-tab active" data-page="dashboard" onclick="switchPage('dashboard')">
         <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg>
@@ -1112,7 +1299,7 @@ details.tech-details summary {
     <!-- Header Actions -->
     <div class="header-actions">
       <!-- Backend Status -->
-      <div class="status-indicator" id="backend-status-pill" title="Flask Backend Status">
+      <div class="status-indicator" id="backend-status-pill" title="Flask Backend Connection">
         <span class="pulse-dot"></span>
         <span id="backend-status-text">Online</span>
       </div>
@@ -1130,8 +1317,8 @@ details.tech-details summary {
       <!-- Active Notice -->
       <span class="notice-pill" id="header-notice-pill">v1.0</span>
 
-      <!-- Dark / Light Theme Toggle -->
-      <button class="theme-btn" id="theme-toggle-btn" title="Toggle Theme" aria-label="Toggle Theme">
+      <!-- Theme Toggle -->
+      <button class="theme-btn" id="theme-toggle-btn" title="Toggle Light / Dark Mode" aria-label="Toggle Theme">
         <svg id="theme-icon-moon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/></svg>
         <svg id="theme-icon-sun" style="display:none;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/></svg>
       </button>
@@ -1141,141 +1328,242 @@ details.tech-details summary {
 
 <main class="container">
 
-  <!-- ==================== PAGE 1: DASHBOARD (ONE FRAME) ==================== -->
+  <!-- ==================== PAGE 1: DASHBOARD ==================== -->
   <section id="page-dashboard" class="app-page active">
-    <!-- Top Action Bar -->
-    <div class="dash-top-bar">
-      <div class="dash-heading">
-        <h2>Privacy Control Center <span class="badge-pep">PEP ACTIVE</span></h2>
-        <p>Purpose-based access control engine. All downstream data requests are verified in SQLite.</p>
+    <!-- Section B: Page Header -->
+    <div class="page-header-row">
+      <div class="page-header-text">
+        <h2>
+          Privacy Control Center
+          <span style="font-size:10px; font-weight:700; background:var(--emerald-bg); color:var(--emerald-text); border:1px solid var(--emerald-border); padding:2px 7px; border-radius:4px; font-family:var(--font-mono);">PEP ACTIVE</span>
+        </h2>
+        <p>Purpose-based data access control engine. Every downstream request is evaluated in real-time against cryptographic consent records.</p>
       </div>
       <div>
-        <button class="btn btn-primary btn-sm" onclick="switchPage('simulator')">
+        <button class="btn btn-primary" onclick="switchPage('simulator')">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347a1.125 1.125 0 01-1.667-.985V5.653z"/></svg>
           Test Access Simulator →
         </button>
       </div>
     </div>
 
-    <!-- Compact Metrics Bar -->
-    <div class="metrics-bar">
-      <div class="metric-item">
-        <span class="m-lbl">Active Consents</span>
-        <span class="m-val green" id="dash-active-count">—</span>
+    <!-- Section C: Metrics Row (5 Cards) -->
+    <div class="metrics-grid">
+      <div class="metric-card">
+        <span class="m-label">Active Consents</span>
+        <span class="m-number green" id="dash-active-count">—</span>
+        <span class="m-sub">Opted-in for active user</span>
       </div>
-      <div class="m-divider"></div>
-      <div class="metric-item">
-        <span class="m-lbl">Revoked</span>
-        <span class="m-val rose" id="dash-revoked-count">—</span>
+      <div class="metric-card">
+        <span class="m-label">Revoked / Denied</span>
+        <span class="m-number rose" id="dash-revoked-count">—</span>
+        <span class="m-sub">Blocked from downstream</span>
       </div>
-      <div class="m-divider"></div>
-      <div class="metric-item">
-        <span class="m-lbl">Requests Allowed</span>
-        <span class="m-val cyan" id="dash-allowed-count">—</span>
+      <div class="metric-card">
+        <span class="m-label">Requests Allowed</span>
+        <span class="m-number cyan" id="dash-allowed-count">—</span>
+        <span class="m-sub">PEP HTTP 200 releases</span>
       </div>
-      <div class="m-divider"></div>
-      <div class="metric-item">
-        <span class="m-lbl">Requests Blocked</span>
-        <span class="m-val rose" id="dash-blocked-count">—</span>
+      <div class="metric-card">
+        <span class="m-label">Requests Blocked</span>
+        <span class="m-number rose" id="dash-blocked-count">—</span>
+        <span class="m-sub">PEP HTTP 403 blocks</span>
       </div>
-      <div class="m-divider"></div>
-      <div class="metric-item">
-        <span class="m-lbl">Audit Integrity</span>
-        <span class="m-val green" id="dash-chain-status" style="font-size:14px; margin-top:2px;">VERIFIED ✓</span>
+      <div class="metric-card">
+        <span class="m-label">Audit Integrity</span>
+        <span class="m-number green" id="dash-chain-status" style="font-size:15px; margin-top:4px;">VERIFIED ✓</span>
+        <span class="m-sub">SHA-256 chained ledger</span>
       </div>
     </div>
 
-    <!-- 3 Purpose Panels -->
+    <!-- Section D: Purpose-Based Consent Cards (3 Cards) -->
     <div class="purposes-grid">
       <!-- Analytics -->
-      <div class="p-card">
-        <div class="p-card-top">
-          <div class="p-icon">
+      <div class="purpose-card">
+        <div class="purpose-card-top">
+          <div class="purpose-icon">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg>
           </div>
           <span class="status-badge" id="dash-status-Analytics">Checking…</span>
         </div>
-        <h3 class="p-title">Analytics</h3>
-        <p class="p-desc">Usage metrics, feature adoption, and site interaction statistics.</p>
-        <div class="p-fields">Fields: <code>page_views</code>, <code>feature_usage</code></div>
-        <button class="btn btn-outline btn-sm btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        <h3 class="purpose-title">Analytics</h3>
+        <p class="purpose-desc">Understand application performance, feature interactions, and user journeys.</p>
+        <div class="purpose-meta-row">
+          <span id="dash-notice-Analytics">Linked Notice: v1.0</span>
+          <span id="dash-updated-Analytics">Updated: —</span>
+        </div>
+        <div class="purpose-fields">Protected: <code>page_views</code>, <code>feature_usage</code></div>
+        <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
       </div>
 
       <!-- Marketing -->
-      <div class="p-card">
-        <div class="p-card-top">
-          <div class="p-icon">
+      <div class="purpose-card">
+        <div class="purpose-card-top">
+          <div class="purpose-icon">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.01 5.395m-1.01-5.395c.579.52 1.094 1.107 1.536 1.75m-1.536-1.75l-4.5 2.625M20.185 9.52a23.85 23.85 0 010 4.96m0-4.96l-4.5 2.625m4.5 2.335a23.91 23.91 0 01-1.01 5.395m1.01-5.395c-.442.643-.957 1.23-1.536 1.75m1.536-1.75l-4.5-2.625"/></svg>
           </div>
           <span class="status-badge" id="dash-status-Marketing">Checking…</span>
         </div>
-        <h3 class="p-title">Marketing</h3>
-        <p class="p-desc">Personalized recommendations, promotional digests, and partner offers.</p>
-        <div class="p-fields">Fields: <code>email_preferences</code>, <code>offers_enabled</code></div>
-        <button class="btn btn-outline btn-sm btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        <h3 class="purpose-title">Marketing</h3>
+        <p class="purpose-desc">Tailored recommendations, periodic digest notifications, and customized offers.</p>
+        <div class="purpose-meta-row">
+          <span id="dash-notice-Marketing">Linked Notice: v1.0</span>
+          <span id="dash-updated-Marketing">Updated: —</span>
+        </div>
+        <div class="purpose-fields">Protected: <code>email_preferences</code>, <code>offers_enabled</code></div>
+        <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
       </div>
 
       <!-- Service Improvement -->
-      <div class="p-card">
-        <div class="p-card-top">
-          <div class="p-icon">
+      <div class="purpose-card">
+        <div class="purpose-card-top">
+          <div class="purpose-icon">
             <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>
           </div>
           <span class="status-badge" id="dash-status-Service Improvement">Checking…</span>
         </div>
-        <h3 class="p-title">Service Improvement</h3>
-        <p class="p-desc">Crash diagnostics, telemetry error logs, and platform response profiling.</p>
-        <div class="p-fields">Fields: <code>app_performance_ms</code>, <code>recent_error_count</code></div>
-        <button class="btn btn-outline btn-sm btn-block" onclick="switchPage('manage')">Manage Permission →</button>
+        <h3 class="purpose-title">Service Improvement</h3>
+        <p class="purpose-desc">Telemetry crash diagnostics, error stack collection, and latency profiling.</p>
+        <div class="purpose-meta-row">
+          <span id="dash-notice-Service Improvement">Linked Notice: v1.0</span>
+          <span id="dash-updated-Service Improvement">Updated: —</span>
+        </div>
+        <div class="purpose-fields">Protected: <code>app_performance_ms</code>, <code>recent_error_count</code></div>
+        <button class="btn btn-outline btn-block" onclick="switchPage('manage')">Manage Permission →</button>
       </div>
     </div>
 
-    <!-- Bottom Compact Info Strip -->
-    <div class="bottom-row">
-      <div class="info-card">
-        <div class="info-card-header">
-          <span class="info-card-title">Active Privacy Policy</span>
-          <strong id="dash-notice-ver" style="color:var(--cyan-400);">Version 1.0</strong>
+    <!-- Section E & F: Downstream Access Activity Stream & Analytics Ratio -->
+    <div class="activity-dashboard-row">
+      <!-- Section E: Recent Downstream Requests Feed -->
+      <div class="dashboard-panel">
+        <div class="panel-head">
+          <h3>
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Recent Downstream Access Requests (PEP Gateway)
+          </h3>
+          <button class="link-btn" onclick="switchPage('history')">View Full Audit History →</button>
         </div>
-        <p class="info-card-text">Consent records expire immediately when policy changes, blocking access until re-consent.</p>
-        <button class="link-btn" onclick="switchPage('notice')">Inspect Notice &amp; Hash →</button>
+
+        <div class="table-wrap">
+          <table class="feed-table">
+            <thead>
+              <tr>
+                <th>Timestamp</th>
+                <th>Subject</th>
+                <th>Purpose</th>
+                <th>PEP Decision</th>
+                <th>Reason &amp; Policy Rule</th>
+                <th>Data Delivery</th>
+              </tr>
+            </thead>
+            <tbody id="dash-recent-requests">
+              <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted)">Loading recent evaluations…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="info-card">
-        <div class="info-card-header">
-          <span class="info-card-title">Downstream Enforcement</span>
-          <strong style="color:var(--emerald-text);">Active (0ms latency)</strong>
+      <!-- Section F: Access Ratio & Enforcement Visualizer -->
+      <div class="dashboard-panel">
+        <div class="panel-head">
+          <h3>
+            <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6a7.5 7.5 0 107.5 7.5h-7.5V6z"/><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0013.5 3v7.5z"/></svg>
+            Enforcement Analytics
+          </h3>
+          <span style="font-size:11px; font-weight:700; color:var(--cyan-400);" id="dash-access-total">Total: 0</span>
         </div>
-        <p class="info-card-text">Every downstream service request is verified in SQLite with immutable SHA-256 audit chaining.</p>
-        <button class="link-btn" onclick="switchPage('history')">View Audit Ledger →</button>
+
+        <div class="viz-panel-content">
+          <div>
+            <div class="viz-stats-row" style="margin-bottom:6px;">
+              <div class="viz-stat-group">
+                <span class="stat-legend-dot green"></span>
+                <span>Allowed: <strong id="dash-viz-allowed-num" style="color:var(--emerald-text);">0</strong></span>
+              </div>
+              <div class="viz-stat-group">
+                <span class="stat-legend-dot rose"></span>
+                <span>Blocked: <strong id="dash-viz-blocked-num" style="color:var(--rose-text);">0</strong></span>
+              </div>
+            </div>
+
+            <!-- Dual Progress Bar -->
+            <div class="progress-track">
+              <div class="bar-segment allowed" id="dash-bar-allowed" style="width: 50%;"></div>
+              <div class="bar-segment blocked" id="dash-bar-blocked" style="width: 50%;"></div>
+            </div>
+            <div style="display:flex; justify-content:space-between; font-size:10.5px; color:var(--text-dim); margin-top:4px;">
+              <span id="dash-pct-allowed">0%</span>
+              <span id="dash-pct-blocked">0%</span>
+            </div>
+          </div>
+
+          <div class="viz-card-meta">
+            <strong style="color:var(--text-primary); display:block; margin-bottom:2px;">PEP Security Boundary:</strong>
+            Unauthorized requests are blocked at the gateway level with 0ms latency. No protected fields or PII ever reach unverified downstream consumers.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section G: Security & Policy Overview (2 Panels) -->
+    <div class="overview-panels-grid">
+      <div class="overview-card">
+        <div class="overview-card-header">
+          <span class="overview-card-title">
+            <svg style="width:16px;height:16px;color:var(--cyan-400);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+            Active Privacy Notice
+          </span>
+          <strong id="dash-notice-ver" style="color:var(--cyan-400);">Version 1.0</strong>
+        </div>
+        <p class="overview-card-text">
+          Consent is cryptographically tethered to the active notice digest. Updating terms immediately invalidates prior consent, enforcing mandatory opt-in.
+        </p>
+        <button class="link-btn" onclick="switchPage('notice')">Inspect Active Notice &amp; Hash →</button>
+      </div>
+
+      <div class="overview-card">
+        <div class="overview-card-header">
+          <span class="overview-card-title">
+            <svg style="width:16px;height:16px;color:var(--emerald-400);" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+            Cryptographic Audit Chain
+          </span>
+          <strong style="color:var(--emerald-text);">100% Intact</strong>
+        </div>
+        <p class="overview-card-text">
+          Audit events form an immutable SHA-256 hash chain: <code>row_hash = sha256(prev_hash + user + action + purpose + timestamp)</code>.
+        </p>
+        <button class="link-btn" onclick="switchPage('history')">Verify Ledger Integrity →</button>
       </div>
     </div>
   </section>
 
   <!-- ==================== PAGE 2: MANAGE CONSENT ==================== -->
   <section id="page-manage" class="app-page">
-    <div class="page-head">
-      <h2>Manage Your Consent</h2>
-      <p>Independently grant or withdraw permission for each purpose for: <strong class="active-user-label" style="color:var(--cyan-400)">demo-user</strong>.</p>
+    <div class="page-header-row">
+      <div class="page-header-text">
+        <h2>Consent Decision Matrix</h2>
+        <p>Granular opt-in and withdrawal controls for active subject: <strong class="active-user-label" style="color:var(--cyan-400)">demo-user</strong>.</p>
+      </div>
     </div>
 
     <!-- 1. Analytics -->
     <div class="manage-consent-card" data-purpose="Analytics">
       <div class="manage-consent-header">
         <div class="manage-consent-title">
-          <div class="p-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg></div>
+          <div class="purpose-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg></div>
           <div>
-            <h3>Analytics</h3>
-            <span class="p-fields" style="display:inline-block; margin:2px 0 0;">Protected: <code>page_views</code>, <code>feature_usage</code></span>
+            <h3>Analytics &amp; Usage Telemetry</h3>
+            <span class="purpose-fields" style="display:inline-block; margin:2px 0 0;">Protected: <code>page_views</code>, <code>feature_usage</code></span>
           </div>
         </div>
         <span class="status-badge" id="status-Analytics">Loading…</span>
       </div>
 
-      <p style="font-size:12.5px; color:var(--text-secondary); margin:6px 0;">Helps us understand how visitors interact with the site without external sharing.</p>
+      <p style="font-size:12.5px; color:var(--text-secondary); margin:6px 0;">Authorizes telemetry pipelines to aggregate interaction patterns and feature adoption without external sharing.</p>
 
       <div class="reconsent-alert" id="reconsent-container-Analytics">
-        <span>⚠ <strong>Notice Updated:</strong> Prior consent was granted under an older notice. Re-affirmation required.</span>
+        <span>⚠ <strong>Notice Updated:</strong> Prior consent was granted under an older notice version. Fresh opt-in required.</span>
         <button class="btn btn-warning btn-sm" onclick="reconsentPurpose('Analytics')">Grant Consent Under Current Notice</button>
       </div>
 
@@ -1292,19 +1580,19 @@ details.tech-details summary {
     <div class="manage-consent-card" data-purpose="Marketing">
       <div class="manage-consent-header">
         <div class="manage-consent-title">
-          <div class="p-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.01 5.395m-1.01-5.395c.579.52 1.094 1.107 1.536 1.75m-1.536-1.75l-4.5 2.625M20.185 9.52a23.85 23.85 0 010 4.96m0-4.96l-4.5 2.625m4.5 2.335a23.91 23.91 0 01-1.01 5.395m1.01-5.395c-.442.643-.957 1.23-1.536 1.75m1.536-1.75l-4.5-2.625"/></svg></div>
+          <div class="purpose-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.34 15.84c-.688-.06-1.386-.09-2.09-.09H7.5a4.5 4.5 0 110-9h.75c.704 0 1.402-.03 2.09-.09m0 9.18c.253.962.584 1.892.985 2.783.247.55.06 1.21-.463 1.511l-.657.38c-.551.318-1.26.117-1.527-.461a20.845 20.845 0 01-1.44-4.282m3.102.069a18.03 18.03 0 01-.59-4.59c0-1.586.205-3.124.59-4.59m0 9.18a23.848 23.848 0 018.835 2.535M10.34 6.66a23.847 23.847 0 008.835-2.535m0 0A23.74 23.74 0 0018.795 3m.38 1.125a23.91 23.91 0 011.01 5.395m-1.01-5.395c.579.52 1.094 1.107 1.536 1.75m-1.536-1.75l-4.5 2.625M20.185 9.52a23.85 23.85 0 010 4.96m0-4.96l-4.5 2.625m4.5 2.335a23.91 23.91 0 01-1.01 5.395m1.01-5.395c-.442.643-.957 1.23-1.536 1.75m1.536-1.75l-4.5-2.625"/></svg></div>
           <div>
-            <h3>Marketing</h3>
-            <span class="p-fields" style="display:inline-block; margin:2px 0 0;">Protected: <code>email_preferences</code>, <code>offers_enabled</code></span>
+            <h3>Marketing Communications</h3>
+            <span class="purpose-fields" style="display:inline-block; margin:2px 0 0;">Protected: <code>email_preferences</code>, <code>offers_enabled</code></span>
           </div>
         </div>
         <span class="status-badge" id="status-Marketing">Loading…</span>
       </div>
 
-      <p style="font-size:12.5px; color:var(--text-secondary); margin:6px 0;">Allows customized product recommendations, periodic newsletters, and promotional discounts.</p>
+      <p style="font-size:12.5px; color:var(--text-secondary); margin:6px 0;">Permits targeted product recommendations, periodic newsletters, and promotional discounts.</p>
 
       <div class="reconsent-alert" id="reconsent-container-Marketing">
-        <span>⚠ <strong>Notice Updated:</strong> Prior consent was granted under an older notice. Re-affirmation required.</span>
+        <span>⚠ <strong>Notice Updated:</strong> Prior consent was granted under an older notice version. Fresh opt-in required.</span>
         <button class="btn btn-warning btn-sm" onclick="reconsentPurpose('Marketing')">Grant Consent Under Current Notice</button>
       </div>
 
@@ -1321,19 +1609,19 @@ details.tech-details summary {
     <div class="manage-consent-card" data-purpose="Service Improvement">
       <div class="manage-consent-header">
         <div class="manage-consent-title">
-          <div class="p-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg></div>
+          <div class="purpose-icon"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg></div>
           <div>
-            <h3>Service Improvement</h3>
-            <span class="p-fields" style="display:inline-block; margin:2px 0 0;">Protected: <code>app_performance_ms</code>, <code>recent_error_count</code></span>
+            <h3>Service Improvement &amp; Diagnostics</h3>
+            <span class="purpose-fields" style="display:inline-block; margin:2px 0 0;">Protected: <code>app_performance_ms</code>, <code>recent_error_count</code></span>
           </div>
         </div>
         <span class="status-badge" id="status-Service Improvement">Loading…</span>
       </div>
 
-      <p style="font-size:12.5px; color:var(--text-secondary); margin:6px 0;">Captures runtime crash telemetry, error stacks, and loading latency benchmarks.</p>
+      <p style="font-size:12.5px; color:var(--text-secondary); margin:6px 0;">Enables capturing unhandled runtime exceptions, crash memory dumps, and latency benchmarks.</p>
 
       <div class="reconsent-alert" id="reconsent-container-Service Improvement">
-        <span>⚠ <strong>Notice Updated:</strong> Prior consent was granted under an older notice. Re-affirmation required.</span>
+        <span>⚠ <strong>Notice Updated:</strong> Prior consent was granted under an older notice version. Fresh opt-in required.</span>
         <button class="btn btn-warning btn-sm" onclick="reconsentPurpose('Service Improvement')">Grant Consent Under Current Notice</button>
       </div>
 
@@ -1349,9 +1637,11 @@ details.tech-details summary {
 
   <!-- ==================== PAGE 3: TEST ACCESS SIMULATOR ==================== -->
   <section id="page-simulator" class="app-page">
-    <div class="page-head">
-      <h2>Test Data Access (Policy Enforcement Point Simulator)</h2>
-      <p>Simulates downstream consumer services requesting data access. The PEP gateway enforces live SQLite permissions.</p>
+    <div class="page-header-row">
+      <div class="page-header-text">
+        <h2>Policy Enforcement Point (PEP) Simulator</h2>
+        <p>Simulates downstream consumer services requesting data access. The PEP gateway enforces live SQLite permissions.</p>
+      </div>
     </div>
 
     <div class="simulator-box">
@@ -1393,7 +1683,7 @@ details.tech-details summary {
         <div class="result-explanation" id="sim-reason-text">Select user and purpose above, then click Evaluate.</div>
 
         <div id="sim-payload-container" style="display:none">
-          <div style="font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:6px;">Sample Payload Released:</div>
+          <div style="font-size:11.5px; font-weight:700; color:var(--text-secondary); margin-bottom:6px;">Sample Payload Released to Downstream Consumer:</div>
           <pre class="data-payload-box" id="sim-raw-json">{}</pre>
         </div>
       </div>
@@ -1402,9 +1692,11 @@ details.tech-details summary {
 
   <!-- ==================== PAGE 4: ACTIVITY HISTORY ==================== -->
   <section id="page-history" class="app-page">
-    <div class="page-head">
-      <h2>Activity &amp; Audit History</h2>
-      <p>Tamper-evident log of consent events and downstream access evaluations, cryptographically chained via SHA-256.</p>
+    <div class="page-header-row">
+      <div class="page-header-text">
+        <h2>Cryptographic Audit Trail</h2>
+        <p>Tamper-evident log of consent events and downstream access evaluations, cryptographically chained via SHA-256.</p>
+      </div>
     </div>
 
     <div class="table-panel">
@@ -1449,7 +1741,7 @@ details.tech-details summary {
               <th>Timestamp</th>
               <th>User</th>
               <th>Purpose</th>
-              <th>Action</th>
+              <th>Action Evaluated</th>
               <th>HTTP</th>
               <th>Reason Code &amp; Policy Decision</th>
             </tr>
@@ -1476,9 +1768,11 @@ details.tech-details summary {
 
   <!-- ==================== PAGE 5: PRIVACY NOTICE ==================== -->
   <section id="page-notice" class="app-page">
-    <div class="page-head">
-      <h2>Privacy Notice &amp; Notice Invalidation</h2>
-      <p>ConsentGuard links every granted permission to a cryptographic hash of the active notice version.</p>
+    <div class="page-header-row">
+      <div class="page-header-text">
+        <h2>Privacy Notice &amp; Notice Invalidation</h2>
+        <p>ConsentGuard links every granted permission to a cryptographic hash of the active notice version.</p>
+      </div>
     </div>
 
     <div class="notice-card">
@@ -1527,9 +1821,11 @@ details.tech-details summary {
 
   <!-- ==================== PAGE 6: DIAGNOSTIC TESTS ==================== -->
   <section id="page-diagnostics" class="app-page">
-    <div class="page-head">
-      <h2>Automated PEP Diagnostic Suite (14 Checks)</h2>
-      <p>14 automated test assertions executing live against the Flask backend and SQLite database.</p>
+    <div class="page-header-row">
+      <div class="page-header-text">
+        <h2>Automated PEP Diagnostic Suite (14 Checks)</h2>
+        <p>14 automated test assertions executing live against the Flask backend and SQLite database.</p>
+      </div>
     </div>
 
     <div class="test-suite-panel">
@@ -1671,37 +1967,61 @@ function renderPurposes() {
   PURPOSES.forEach(purpose => {
     const consent = consentFor(purpose);
     const dashStatus = document.getElementById('dash-status-' + purpose);
+    const dashNotice = document.getElementById('dash-notice-' + purpose);
+    const dashUpdated = document.getElementById('dash-updated-' + purpose);
     const manageStatus = document.getElementById('status-' + purpose);
     const reconsentAlert = document.getElementById('reconsent-container-' + purpose);
     const updatedEl = document.getElementById('updated-' + purpose);
 
     let label = 'Not Granted', cls = 'not-granted';
+    let noticeText = `Active Notice: v${currentNoticeVer}`;
     let isStale = false;
 
     if (consent && Number(consent.granted) === 1 && consent.notice_version !== currentNoticeVer) {
-      label = `Notice Changed (v${consent.notice_version})`;
+      label = `Re-consent Needed (v${consent.notice_version})`;
       cls = 'stale';
       isStale = true;
+      noticeText = `Granted on v${consent.notice_version} (Current: v${currentNoticeVer})`;
       revokedCount++;
     } else if (consent && Number(consent.granted) === 1) {
-      label = 'Active Consent';
+      label = `Active Consent (v${consent.notice_version})`;
       cls = 'granted';
+      noticeText = `Notice: v${consent.notice_version} (Current)`;
       activeCount++;
     } else if (consent && consent.last_action === 'withdraw') {
-      label = 'Withdrawn';
+      label = 'Consent Withdrawn';
       cls = 'withdrawn';
+      noticeText = `Withdrawn under v${consent.notice_version || currentNoticeVer}`;
       revokedCount++;
     } else if (consent && consent.last_action === 'deny') {
-      label = 'Denied';
+      label = 'Explicitly Denied';
       cls = 'denied';
+      noticeText = `Denied under v${consent.notice_version || currentNoticeVer}`;
       revokedCount++;
     } else {
+      noticeText = `No consent recorded (Default: Denied)`;
       revokedCount++;
     }
 
     if (dashStatus) {
       dashStatus.textContent = label;
       dashStatus.className = 'status-badge ' + cls;
+    }
+
+    if (dashNotice) {
+      dashNotice.textContent = noticeText;
+    }
+
+    let timeString = 'Never';
+    if (consent && consent.updated_at) {
+      try {
+        const d = new Date(consent.updated_at);
+        timeString = isNaN(d) ? consent.updated_at : d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+      } catch(e) {}
+    }
+
+    if (dashUpdated) {
+      dashUpdated.textContent = 'Updated: ' + timeString;
     }
 
     if (manageStatus) {
@@ -1714,26 +2034,91 @@ function renderPurposes() {
     }
 
     if (updatedEl) {
-      if (consent && consent.updated_at) {
-        const d = new Date(consent.updated_at);
-        updatedEl.textContent = 'Last updated: ' + (isNaN(d) ? consent.updated_at : d.toLocaleString());
-      } else {
-        updatedEl.textContent = 'Last updated: Never (Default)';
-      }
+      updatedEl.textContent = 'Last updated: ' + timeString;
     }
   });
 
   document.getElementById('dash-active-count').textContent = activeCount + ' / 3';
   document.getElementById('dash-revoked-count').textContent = revokedCount;
 
+  // Real counts from audit ledger
   let allowedCount = 0;
   let blockedCount = 0;
+  const accessEvents = [];
+
   state.audit.forEach(evt => {
-    if (evt.action === 'data_access_allowed') allowedCount++;
-    if (evt.action === 'data_access_denied') blockedCount++;
+    if (evt.action === 'data_access_allowed') {
+      allowedCount++;
+      accessEvents.push(evt);
+    }
+    if (evt.action === 'data_access_denied') {
+      blockedCount++;
+      accessEvents.push(evt);
+    }
   });
+
   document.getElementById('dash-allowed-count').textContent = allowedCount;
   document.getElementById('dash-blocked-count').textContent = blockedCount;
+
+  // Render Dashboard Section E: Recent Downstream Requests Feed
+  const recentTableBody = document.getElementById('dash-recent-requests');
+  if (recentTableBody) {
+    if (!accessEvents.length) {
+      recentTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted)">No downstream access requests evaluated yet. Launch the Simulator to test an API request.</td></tr>';
+    } else {
+      recentTableBody.innerHTML = accessEvents.slice(0, 5).map(evt => {
+        const isAllowed = evt.action === 'data_access_allowed';
+        const badgeCls = isAllowed ? 'allow' : 'deny';
+        const badgeText = isAllowed ? 'ALLOW (200)' : 'BLOCK (403)';
+
+        let timeStr = evt.created_at || '—';
+        try {
+          const d = new Date(evt.created_at);
+          if (!isNaN(d)) timeStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+        } catch(e) {}
+
+        let reasonText = evt.reason_code || '—';
+        if (evt.reason_code === 'ACTIVE_CONSENT') reasonText = 'Valid Opt-In Verified';
+        else if (evt.reason_code === 'NO_CONSENT') reasonText = 'No Consent Recorded';
+        else if (evt.reason_code === 'WITHDRAWN') reasonText = 'Withdrawn by Subject';
+        else if (evt.reason_code === 'NOTICE_MISMATCH') reasonText = 'Notice Outdated (Re-consent Needed)';
+        else if (evt.reason_code === 'DENIED') reasonText = 'Explicitly Denied';
+
+        const dataDelivery = isAllowed 
+          ? '<span style="color:var(--emerald-text); font-weight:600;">2 fields released</span>'
+          : '<span style="color:var(--rose-text); font-weight:600;">0 bytes (Protected)</span>';
+
+        return '<tr>' +
+          '<td style="white-space:nowrap; font-family:var(--font-mono); font-size:11px; color:var(--text-muted)">' + escapeHtml(timeStr) + '</td>' +
+          '<td><strong style="color:var(--cyan-400)">' + escapeHtml(evt.user_id) + '</strong></td>' +
+          '<td>' + escapeHtml(evt.purpose) + '</td>' +
+          '<td><span class="feed-badge ' + badgeCls + '">' + badgeText + '</span></td>' +
+          '<td><strong>' + escapeHtml(reasonText) + '</strong></td>' +
+          '<td>' + dataDelivery + '</td>' +
+        '</tr>';
+      }).join('');
+    }
+  }
+
+  // Render Dashboard Section F: Enforcement Analytics Ratio Bar
+  const totalAccess = allowedCount + blockedCount;
+  document.getElementById('dash-access-total').textContent = 'Total: ' + totalAccess;
+  document.getElementById('dash-viz-allowed-num').textContent = allowedCount;
+  document.getElementById('dash-viz-blocked-num').textContent = blockedCount;
+
+  if (totalAccess > 0) {
+    const allowedPct = Math.round((allowedCount / totalAccess) * 100);
+    const blockedPct = 100 - allowedPct;
+    document.getElementById('dash-bar-allowed').style.width = allowedPct + '%';
+    document.getElementById('dash-bar-blocked').style.width = blockedPct + '%';
+    document.getElementById('dash-pct-allowed').textContent = allowedPct + '% Allowed';
+    document.getElementById('dash-pct-blocked').textContent = blockedPct + '% Blocked';
+  } else {
+    document.getElementById('dash-bar-allowed').style.width = '0%';
+    document.getElementById('dash-bar-blocked').style.width = '0%';
+    document.getElementById('dash-pct-allowed').textContent = '0% Allowed';
+    document.getElementById('dash-pct-blocked').textContent = '0% Blocked';
+  }
 }
 
 function renderAudit() {
