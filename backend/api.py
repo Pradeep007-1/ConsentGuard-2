@@ -71,7 +71,12 @@ def illustration():
 
 @app.get("/api/health")
 def health():
-    return jsonify({"status": "ok", "service": "ConsentGuard API"})
+    try:
+        with get_connection() as connection:
+            connection.execute("SELECT 1").fetchone()
+        return jsonify({"status": "ok", "service": "ConsentGuard API", "database": "connected"})
+    except Exception as e:
+        return jsonify({"status": "error", "service": "ConsentGuard API", "error": str(e)}), 503
 
 
 @app.get("/api/notice")

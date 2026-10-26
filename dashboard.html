@@ -1493,25 +1493,25 @@ table.feed-table tr:hover td {
             </div>
           </div>
 
-          <!-- 3. Third-Party Sharing -->
-          <div class="purpose-card" id="card-purpose-Third-Party-Sharing">
+          <!-- 3. Service Improvement -->
+          <div class="purpose-card" id="card-purpose-Service-Improvement">
             <div class="purpose-header">
               <div class="purpose-icon-box">
-                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/></svg>
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.32l-3.232 3.232a.75.75 0 01-1.06 0l-2.122-2.122a.75.75 0 010-1.06l3.232-3.232a4.5 4.5 0 00-6.32 4.486c.048.58.024 1.193-.14 1.743"/></svg>
               </div>
-              <span class="status-badge not-granted" id="dash-status-Third-Party Sharing">Not set</span>
+              <span class="status-badge not-granted" id="dash-status-Service Improvement">Not set</span>
             </div>
-            <h4 class="purpose-title">Third-Party Sharing</h4>
-            <p class="purpose-desc">Permits transmitting user preferences to verified partner services for collaborative care workflows.</p>
+            <h4 class="purpose-title">Service Improvement</h4>
+            <p class="purpose-desc">Helps improve application performance by analyzing crash reports, technical errors, and response times.</p>
             <div class="purpose-meta-row">
-              <span id="dash-notice-Third-Party Sharing">Linked Notice: v1.0</span>
-              <span id="dash-updated-Third-Party Sharing">Updated: Never</span>
+              <span id="dash-notice-Service Improvement">Linked Notice: v1.0</span>
+              <span id="dash-updated-Service Improvement">Updated: Never</span>
             </div>
-            <div class="purpose-fields">Protected: <code>partner_service</code>, <code>shared_fields</code></div>
+            <div class="purpose-fields">Protected: <code>app_performance_ms</code>, <code>recent_error_count</code></div>
             <div class="purpose-actions-row">
-              <button class="btn btn-sm btn-success" onclick="setConsent('Third-Party Sharing', 'grant')">Grant</button>
-              <button class="btn btn-sm btn-danger-outline" onclick="setConsent('Third-Party Sharing', 'deny')">Deny</button>
-              <button class="btn btn-sm btn-warning-outline" onclick="setConsent('Third-Party Sharing', 'withdraw')">Withdraw</button>
+              <button class="btn btn-sm btn-success" onclick="setConsent('Service Improvement', 'grant')">Grant</button>
+              <button class="btn btn-sm btn-danger-outline" onclick="setConsent('Service Improvement', 'deny')">Deny</button>
+              <button class="btn btn-sm btn-warning-outline" onclick="setConsent('Service Improvement', 'withdraw')">Withdraw</button>
             </div>
           </div>
         </div>
@@ -1543,7 +1543,6 @@ table.feed-table tr:hover td {
                   <select id="sim-purpose" class="form-control">
                     <option value="Analytics" selected>Analytics</option>
                     <option value="Marketing">Marketing</option>
-                    <option value="Third-Party Sharing">Third-Party Sharing</option>
                     <option value="Service Improvement">Service Improvement</option>
                   </select>
                 </div>
@@ -1651,7 +1650,7 @@ table.feed-table tr:hover td {
             <h2>Manage Consent Matrix</h2>
             <p>Granular opt-in, denial, and withdrawal controls for active subject: <strong class="active-user-label" style="color:var(--primary)">demo-user</strong>.</p>
           </div>
-          <button class="btn btn-outline" onclick="refreshAll()">↻ Refresh Consent State</button>
+          <button class="btn btn-outline" id="btn-refresh-consent" onclick="refreshConsentState()">↻ Refresh Consent State</button>
         </div>
 
         <div class="dashboard-panel" style="margin-bottom:20px; padding:18px;">
@@ -1701,19 +1700,19 @@ table.feed-table tr:hover td {
 
           <div class="purpose-card">
             <div class="purpose-header">
-              <h4 class="purpose-title">🔗 Third-Party Sharing</h4>
-              <span class="status-badge" id="status-Third-Party Sharing">Checking…</span>
+              <h4 class="purpose-title">🛠️ Service Improvement</h4>
+              <span class="status-badge" id="status-Service Improvement">Checking…</span>
             </div>
-            <p class="purpose-desc">Transmitting verified health records and preferences to external healthcare providers.</p>
-            <div id="reconsent-container-Third-Party Sharing" style="margin-bottom:12px;"></div>
+            <p class="purpose-desc">Helps improve application performance by analyzing crash reports, technical errors, and response times.</p>
+            <div id="reconsent-container-Service Improvement" style="margin-bottom:12px;"></div>
             <div class="purpose-meta-row">
-              <span id="notice-Third-Party Sharing">Linked Notice: v1.0</span>
-              <span id="updated-Third-Party Sharing">Last updated: Never</span>
+              <span id="notice-Service Improvement">Linked Notice: v1.0</span>
+              <span id="updated-Service Improvement">Last updated: Never</span>
             </div>
             <div class="purpose-actions-row">
-              <button class="btn btn-sm btn-success" onclick="setConsent('Third-Party Sharing', 'grant')">Grant</button>
-              <button class="btn btn-sm btn-danger-outline" onclick="setConsent('Third-Party Sharing', 'deny')">Deny</button>
-              <button class="btn btn-sm btn-warning-outline" onclick="setConsent('Third-Party Sharing', 'withdraw')">Withdraw</button>
+              <button class="btn btn-sm btn-success" onclick="setConsent('Service Improvement', 'grant')">Grant</button>
+              <button class="btn btn-sm btn-danger-outline" onclick="setConsent('Service Improvement', 'deny')">Deny</button>
+              <button class="btn btn-sm btn-warning-outline" onclick="setConsent('Service Improvement', 'withdraw')">Withdraw</button>
             </div>
           </div>
         </div>
@@ -1745,7 +1744,6 @@ table.feed-table tr:hover td {
               <select id="sim-page-purpose" class="form-control" onchange="document.getElementById('sim-purpose').value = this.value">
                 <option value="Analytics" selected>Analytics</option>
                 <option value="Marketing">Marketing</option>
-                <option value="Third-Party Sharing">Third-Party Sharing</option>
                 <option value="Service Improvement">Service Improvement</option>
               </select>
             </div>
@@ -1835,7 +1833,7 @@ table.feed-table tr:hover td {
             <h2>Consent &amp; Security Analytics</h2>
             <p>Operational telemetry and compliance distribution calculated from genuine SQLite audit records.</p>
           </div>
-          <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh Metrics</button>
+          <button class="btn btn-outline btn-sm" id="btn-refresh-analytics" onclick="refreshAnalyticsMetrics()">↻ Refresh Metrics</button>
         </div>
 
         <div class="summary-cards-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom:20px;">
@@ -1869,7 +1867,7 @@ table.feed-table tr:hover td {
           <div class="analytics-meta-box">
             <strong>Security Boundary Guarantees:</strong>
             <ul style="margin: 8px 0 0 18px; line-height: 1.6;">
-              <li>Strict itemized consent: Opting into Analytics never authorizes Marketing or Third-Party Sharing.</li>
+              <li>Strict itemized consent: Opting into Analytics never authorizes Marketing or Service Improvement.</li>
               <li>Zero-latency revocation: Withdrawing consent blocks subsequent requests immediately (HTTP 403).</li>
               <li>Notice version invalidation: Upgrading privacy terms automatically invalidates prior consents until re-consent is recorded.</li>
             </ul>
@@ -2018,7 +2016,7 @@ table.feed-table tr:hover td {
 <!-- ==================== CORE JAVASCRIPT ==================== -->
 <script>
 const API = '/api';
-const PURPOSES = ['Analytics', 'Marketing', 'Third-Party Sharing', 'Service Improvement'];
+const PURPOSES = ['Analytics', 'Marketing', 'Service Improvement'];
 
 const state = {
   currentUser: 'demo-user',
@@ -2066,6 +2064,18 @@ document.getElementById('theme-toggle-btn').addEventListener('click', () => {
 });
 applyTheme(state.theme);
 
+const bPill = document.getElementById('backend-status-pill');
+if (bPill) {
+  bPill.addEventListener('click', async () => {
+    const ok = await checkBackendHealth();
+    if (ok) {
+      showToast('Backend health check: Online (SQLite connected).');
+    } else {
+      showToast('Backend health check: Offline or database error.', true);
+    }
+  });
+}
+
 // Mobile Sidebar Toggle
 function toggleMobileSidebar() {
   const sidebar = document.getElementById('sidebar');
@@ -2092,23 +2102,32 @@ document.addEventListener('click', (e) => {
 
 function onUserChange(newUser) {
   state.currentUser = newUser;
-  document.getElementById('user-dropdown-selected-label').textContent = newUser;
-  document.getElementById('header-user-select').value = newUser;
-  document.getElementById('sim-user').value = newUser;
+  const label = document.getElementById('user-dropdown-selected-label');
+  if (label) label.textContent = newUser;
+  const headerSelect = document.getElementById('header-user-select');
+  if (headerSelect) headerSelect.value = newUser;
+  const simUser = document.getElementById('sim-user');
+  if (simUser) simUser.value = newUser;
   const pageUser = document.getElementById('sim-page-user');
   if (pageUser) pageUser.value = newUser;
+
+  document.querySelectorAll('.active-user-label').forEach(el => {
+    el.textContent = newUser;
+  });
 
   document.querySelectorAll('#user-dropdown-menu .custom-dropdown-item').forEach(item => {
     item.classList.toggle('active', item.dataset.value === newUser);
   });
 
   const dropdown = document.getElementById('user-custom-dropdown');
-  dropdown.classList.remove('open');
-  document.getElementById('user-dropdown-btn').setAttribute('aria-expanded', 'false');
+  if (dropdown) dropdown.classList.remove('open');
+  const btn = document.getElementById('user-dropdown-btn');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
 
   showToast('Switched active user to: ' + newUser);
   refreshAll();
 }
+
 
 // Navigation Tab Switching
 function switchPage(pageId) {
@@ -2409,44 +2428,176 @@ async function loadNoticeHistory() {
   } catch(e) {}
 }
 
-// Main Data Refresh
-async function refreshAll() {
+// Backend Health & SQLite Connectivity Checker
+async function checkBackendHealth() {
+  const bPill = document.getElementById('backend-status-pill');
+  const bText = document.getElementById('backend-status-text');
   try {
-    const [consentsRes, auditRes, noticeRes, noticesRes, healthRes] = await Promise.all([
-      requestJson('/consents?user_id=' + encodeURIComponent(state.currentUser)),
-      requestJson('/audit?limit=100'),
-      requestJson('/notice'),
-      requestJson('/notices'),
-      requestJson('/health')
-    ]);
-
-    if (healthRes.response.ok) {
-      const bPill = document.getElementById('backend-status-pill');
+    const res = await fetch(API + '/health', { cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.status === 'ok') {
       if (bPill) {
         bPill.style.borderColor = 'var(--emerald-border)';
         bPill.style.background = 'var(--emerald-bg)';
         bPill.style.color = 'var(--emerald-text)';
       }
-      const bText = document.getElementById('backend-status-text');
       if (bText) bText.textContent = 'Backend: Online';
+      return true;
+    } else {
+      if (bPill) {
+        bPill.style.borderColor = 'var(--rose-border)';
+        bPill.style.background = 'var(--rose-bg)';
+        bPill.style.color = 'var(--rose-text)';
+      }
+      if (bText) bText.textContent = data.error ? 'Backend: DB Error' : 'Backend: Error';
+      return false;
     }
+  } catch (err) {
+    if (bPill) {
+      bPill.style.borderColor = 'var(--rose-border)';
+      bPill.style.background = 'var(--rose-bg)';
+      bPill.style.color = 'var(--rose-text)';
+    }
+    if (bText) bText.textContent = 'Backend: Offline';
+    return false;
+  }
+}
+
+// Notice DOM Updater
+function updateNoticeDom() {
+  if (!state.notice) return;
+  const verText = 'v' + state.notice.notice_version;
+  const hPill = document.getElementById('header-notice-pill');
+  if (hPill) hPill.textContent = verText;
+  const nVer = document.getElementById('notice-version');
+  if (nVer) nVer.textContent = verText;
+  const nHash = document.getElementById('notice-hash');
+  if (nHash) nHash.textContent = state.notice.notice_hash || '—';
+  const nText = document.getElementById('notice-text');
+  if (nText) nText.textContent = state.notice.notice_text || '';
+  const aVer = document.getElementById('analytics-notice-version');
+  if (aVer) aVer.textContent = verText;
+}
+
+// 2. Refresh Consent State (Dedicated for Manage Consent Page)
+let isRefreshingConsent = false;
+async function refreshConsentState() {
+  if (isRefreshingConsent) return;
+  isRefreshingConsent = true;
+
+  const btn = document.getElementById('btn-refresh-consent');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '↻ Refreshing…';
+  }
+
+  try {
+    const healthOk = await checkBackendHealth();
+    if (!healthOk) {
+      throw new Error('Backend is offline or SQLite database is unavailable.');
+    }
+
+    const [consentsRes, noticeRes] = await Promise.all([
+      requestJson('/consents?user_id=' + encodeURIComponent(state.currentUser)),
+      requestJson('/notice')
+    ]);
+
+    state.consents = consentsRes.data || [];
+    if (noticeRes.data) {
+      state.notice = noticeRes.data;
+      updateNoticeDom();
+    }
+
+    renderPurposes();
+    showToast('Consent state refreshed for ' + state.currentUser + '.');
+  } catch (err) {
+    showToast('Failed to refresh consent state: ' + err.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml || '↻ Refresh Consent State';
+    }
+    isRefreshingConsent = false;
+  }
+}
+
+// 3. Refresh Analytics Metrics (Dedicated for Analytics Page)
+let isRefreshingAnalytics = false;
+async function refreshAnalyticsMetrics() {
+  if (isRefreshingAnalytics) return;
+  isRefreshingAnalytics = true;
+
+  const btn = document.getElementById('btn-refresh-analytics');
+  const origHtml = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '↻ Refreshing…';
+  }
+
+  try {
+    const healthOk = await checkBackendHealth();
+    if (!healthOk) {
+      throw new Error('Backend is offline or SQLite database is unavailable.');
+    }
+
+    const [auditRes, verifyRes, noticeRes] = await Promise.all([
+      requestJson('/audit?limit=200'),
+      requestJson('/audit/verify'),
+      requestJson('/notice')
+    ]);
+
+    state.audit = auditRes.data || [];
+    if (noticeRes.data) {
+      state.notice = noticeRes.data;
+      updateNoticeDom();
+    }
+
+    renderPurposes();
+    renderAudit();
+
+    const chainEl = document.getElementById('analytics-chain-status');
+    if (chainEl && verifyRes.data) {
+      const isIntact = verifyRes.data.status === 'intact';
+      chainEl.textContent = isIntact ? '100% Intact' : 'Compromised';
+      chainEl.className = 'summary-card-number ' + (isIntact ? 'green' : 'rose');
+    }
+
+    showToast('Analytics metrics updated from live database.');
+  } catch (err) {
+    showToast('Failed to refresh metrics: ' + err.message, true);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origHtml || '↻ Refresh Metrics';
+    }
+    isRefreshingAnalytics = false;
+  }
+}
+
+// Main Data Refresh
+async function refreshAll() {
+  const healthOk = await checkBackendHealth();
+  if (!healthOk) {
+    showToast('Cannot connect to Flask backend on port 5001.', true);
+    return;
+  }
+
+  try {
+    const [consentsRes, auditRes, noticeRes, noticesRes, verifyRes] = await Promise.all([
+      requestJson('/consents?user_id=' + encodeURIComponent(state.currentUser)),
+      requestJson('/audit?limit=200'),
+      requestJson('/notice'),
+      requestJson('/notices'),
+      requestJson('/audit/verify')
+    ]);
 
     state.consents = consentsRes.data || [];
     state.audit = auditRes.data || [];
 
     if (noticeRes.data) {
       state.notice = noticeRes.data;
-      const verText = 'v' + state.notice.notice_version;
-      const hPill = document.getElementById('header-notice-pill');
-      if (hPill) hPill.textContent = verText;
-      const nVer = document.getElementById('notice-version');
-      if (nVer) nVer.textContent = verText;
-      const nHash = document.getElementById('notice-hash');
-      if (nHash) nHash.textContent = state.notice.notice_hash || '—';
-      const nText = document.getElementById('notice-text');
-      if (nText) nText.textContent = state.notice.notice_text || '';
-      const aVer = document.getElementById('analytics-notice-version');
-      if (aVer) aVer.textContent = verText;
+      updateNoticeDom();
     }
 
     if (noticesRes.data) {
@@ -2456,18 +2607,19 @@ async function refreshAll() {
 
     renderPurposes();
     renderAudit();
-  } catch(error) {
-    const bPill = document.getElementById('backend-status-pill');
-    if (bPill) {
-      bPill.style.borderColor = 'var(--rose-border)';
-      bPill.style.background = 'var(--rose-bg)';
-      bPill.style.color = 'var(--rose-text)';
+
+    const chainEl = document.getElementById('analytics-chain-status');
+    if (chainEl && verifyRes.data) {
+      const isIntact = verifyRes.data.status === 'intact';
+      chainEl.textContent = isIntact ? '100% Intact' : 'Compromised';
+      chainEl.className = 'summary-card-number ' + (isIntact ? 'green' : 'rose');
     }
-    const bText = document.getElementById('backend-status-text');
-    if (bText) bText.textContent = 'Backend: Offline';
-    showToast('Cannot connect to Flask backend on port 5001.', true);
+  } catch (error) {
+    await checkBackendHealth();
+    showToast('Error syncing with backend: ' + error.message, true);
   }
 }
+
 
 // Consent Action Trigger (Grant / Deny / Withdraw)
 async function setConsent(purpose, action) {
@@ -2766,6 +2918,7 @@ function openGuidedDemo() {
 
 // Initial Boot
 refreshAll();
+setInterval(checkBackendHealth, 15000);
 </script>
 </body>
 </html>
