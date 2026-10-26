@@ -306,3 +306,72 @@ def test_15_audit_hash_chain_intact_and_verifiable(app_client):
     result = verify_res.get_json()
     assert result["status"] == "intact"
     assert result["verified_count"] >= 4
+
+
+def test_16_notice_invalidation_lifecycle_and_withdrawal_isolation(app_client):
+    """16. Verify complete notice invalidation, re-consent, withdrawal, reset isolation, and audit logging."""
+    # 1. Grant consent under v1.0 and access permitted data
+    grant_res = record_consent(app_client, "user_lifecycle", "Service Improvement", "grant", source="test")
+    assert grant_res.status_code == 201
+    assert grant_res.get_json()["granted"] is True
+    assert grant_res.get_json()["notice_version"] == "1.0"
+
+    access_res = request_data(app_client, "user_lifecycle", "Service Improvement", source="test")
+    assert access_res.status_code == 200
+    assert access_res.get_json()["allowed"] is True
+    assert "app_performance_ms" in access_res.get_json()["data"]
+
+    # 2. Change notice to v2.0
+    update_res = app_client.post("/api/notice/update", json={"notice_version": "2.0", "source": "test"})
+    assert update_res.status_code == 200
+
+    # 3 & 4. Previous v1.0 consent is now invalid -> HTTP 403 NOTICE_MISMATCH
+    stale_access = request_data(app_client, "user_lifecycle", "Service Improvement", source="test")
+    assert stale_access.status_code == 403
+    stale_data = stale_access.get_json()
+    assert stale_data["allowed"] is False
+    assert stale_data["reason_code"] == "NOTICE_MISMATCH"
+    assert "NOTICE_OUTDATED_RECONSENT_REQUIRED" in (stale_data.get("reason", "") + stale_data.get("error_code", ""))
+
+    # 5. Database state reflects notice v1.0 while active notice is v2.0
+    consents_res = app_client.get("/api/consents?user_id=user_lifecycle")
+    assert consents_res.status_code == 200
+    user_consents = consents_res.get_json()
+    assert len(user_consents) == 1
+    assert user_consents[0]["notice_version"] == "1.0"
+    assert user_consents[0]["granted"] == 1  # Persisted DB record is preserved
+
+    # 6. Grant fresh consent under v2.0
+    fresh_grant = record_consent(app_client, "user_lifecycle", "Service Improvement", "grant", source="test")
+    assert fresh_grant.status_code == 201
+    assert fresh_grant.get_json()["notice_version"] == "2.0"
+
+    # 7. Access is allowed again
+    fresh_access = request_data(app_client, "user_lifecycle", "Service Improvement", source="test")
+    assert fresh_access.status_code == 200
+    assert fresh_access.get_json()["allowed"] is True
+
+    # 8. Withdraw the new consent
+    withdraw_res = record_consent(app_client, "user_lifecycle", "Service Improvement", "withdraw", source="test")
+    assert withdraw_res.status_code == 201
+    blocked_access = request_data(app_client, "user_lifecycle", "Service Improvement", source="test")
+    assert blocked_access.status_code == 403
+    assert blocked_access.get_json()["reason_code"] == "WITHDRAWN"
+
+    # 9. Reset notice to v1.0: previously withdrawn consent is NOT automatically restored
+    reset_res = app_client.post("/api/notice/reset", json={"source": "test"})
+    assert reset_res.status_code == 200
+    after_reset_access = request_data(app_client, "user_lifecycle", "Service Improvement", source="test")
+    assert after_reset_access.status_code == 403
+    assert after_reset_access.get_json()["reason_code"] == "WITHDRAWN"
+
+    # 10. Confirm audit log recorded every transition with full detail
+    audit_res = app_client.get("/api/audit?user_id=user_lifecycle")
+    assert audit_res.status_code == 200
+    events = audit_res.get_json()
+    actions = [e["action"] for e in events]
+    assert "grant" in actions
+    assert "withdraw" in actions
+    assert "data_access_allowed" in actions
+    assert "data_access_denied" in actions
+

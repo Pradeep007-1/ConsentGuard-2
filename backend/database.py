@@ -178,6 +178,7 @@ def initialize_database():
                 purpose TEXT NOT NULL,
                 granted INTEGER NOT NULL CHECK (granted IN (0, 1)),
                 notice_version TEXT NOT NULL,
+                notice_hash TEXT NOT NULL DEFAULT '',
                 last_action TEXT NOT NULL DEFAULT 'grant',
                 updated_at TEXT NOT NULL DEFAULT (
                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -187,7 +188,7 @@ def initialize_database():
             """
         )
 
-        # Check if last_action column exists in consents
+        # Check if last_action and notice_hash columns exist in consents
         consent_cols = [
             row["name"]
             for row in connection.execute("PRAGMA table_info(consents)").fetchall()
@@ -195,6 +196,10 @@ def initialize_database():
         if "last_action" not in consent_cols:
             connection.execute(
                 "ALTER TABLE consents ADD COLUMN last_action TEXT NOT NULL DEFAULT 'grant'"
+            )
+        if "notice_hash" not in consent_cols:
+            connection.execute(
+                "ALTER TABLE consents ADD COLUMN notice_hash TEXT NOT NULL DEFAULT ''"
             )
 
         connection.execute(

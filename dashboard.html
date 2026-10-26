@@ -1459,6 +1459,7 @@ table.feed-table tr:hover td {
             </div>
             <h4 class="purpose-title">Analytics</h4>
             <p class="purpose-desc">Collects page view frequencies, navigation journeys, and feature performance metrics.</p>
+            <div id="dash-reconsent-Analytics"></div>
             <div class="purpose-meta-row">
               <span id="dash-notice-Analytics">Linked Notice: v1.0</span>
               <span id="dash-updated-Analytics">Updated: Never</span>
@@ -1481,6 +1482,7 @@ table.feed-table tr:hover td {
             </div>
             <h4 class="purpose-title">Marketing</h4>
             <p class="purpose-desc">Enables tailored product recommendations, periodic digests, and customized campaign offers.</p>
+            <div id="dash-reconsent-Marketing"></div>
             <div class="purpose-meta-row">
               <span id="dash-notice-Marketing">Linked Notice: v1.0</span>
               <span id="dash-updated-Marketing">Updated: Never</span>
@@ -1503,6 +1505,7 @@ table.feed-table tr:hover td {
             </div>
             <h4 class="purpose-title">Service Improvement</h4>
             <p class="purpose-desc">Helps improve application performance by analyzing crash reports, technical errors, and response times.</p>
+            <div id="dash-reconsent-Service Improvement"></div>
             <div class="purpose-meta-row">
               <span id="dash-notice-Service Improvement">Linked Notice: v1.0</span>
               <span id="dash-updated-Service Improvement">Updated: Never</span>
@@ -2213,8 +2216,11 @@ function renderPurposes() {
       } catch(e) {}
     }
 
-    if (consent && Number(consent.granted) === 1 && consent.notice_version !== currentNoticeVer) {
-      label = `Re-consent (v${consent.notice_version} -> v${currentNoticeVer})`;
+    const noticeHashMismatch = consent?.notice_hash && state.notice?.notice_hash && consent.notice_hash !== state.notice.notice_hash;
+    const isOutdated = consent && Number(consent.granted) === 1 && (consent.notice_version !== currentNoticeVer || noticeHashMismatch);
+
+    if (isOutdated) {
+      label = 'Re-consent Required';
       cls = 'stale';
       isStale = true;
     } else if (consent && Number(consent.granted) === 1) {
@@ -2231,12 +2237,14 @@ function renderPurposes() {
       revokedCount++;
     }
 
+    const linkedNoticeText = consent ? (isStale ? `Notice v${consent.notice_version} (Active: v${currentNoticeVer})` : `Linked Notice: v${consent.notice_version}`) : `Linked Notice: v${currentNoticeVer}`;
+
     if (dashStatus) {
       dashStatus.textContent = label;
       dashStatus.className = 'status-badge ' + cls;
     }
     if (dashNotice) {
-      dashNotice.textContent = consent ? `Linked Notice: v${consent.notice_version}` : `Linked Notice: v${currentNoticeVer}`;
+      dashNotice.textContent = linkedNoticeText;
     }
     if (dashUpdated) {
       dashUpdated.textContent = 'Updated: ' + timeString;
@@ -2247,17 +2255,28 @@ function renderPurposes() {
       manageStatus.className = 'status-badge ' + cls;
     }
     if (manageNotice) {
-      manageNotice.textContent = consent ? `Linked Notice: v${consent.notice_version}` : `Linked Notice: v${currentNoticeVer}`;
+      manageNotice.textContent = linkedNoticeText;
     }
     if (manageUpdated) {
       manageUpdated.textContent = 'Last updated: ' + timeString;
+    }
+
+    const dashReconsent = document.getElementById('dash-reconsent-' + purpose);
+    if (dashReconsent) {
+      if (isStale && consent) {
+        dashReconsent.innerHTML = `<div style="background:var(--amber-bg); border:1px solid var(--amber-border); padding:6px 10px; border-radius:6px; font-size:11.5px; color:var(--amber-text); display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">` +
+          `<span>Notice v${currentNoticeVer} re-consent required</span>` +
+          `<button class="btn btn-sm btn-primary" style="padding:2px 8px; font-size:11px;" onclick="setConsent('${purpose}', 'grant')">Re-consent</button></div>`;
+      } else {
+        dashReconsent.innerHTML = '';
+      }
     }
 
     if (reconsentContainer) {
       if (isStale && consent) {
         reconsentContainer.innerHTML = `<div style="background:var(--amber-bg); border:1px solid var(--amber-border); padding:8px 10px; border-radius:6px; font-size:11.5px; color:var(--amber-text); display:flex; justify-content:space-between; align-items:center;">` +
           `<span>Notice updated to v${currentNoticeVer}. Re-consent required.</span>` +
-          `<button class="btn btn-sm btn-primary" onclick="setConsent('${purpose}', 'grant')">Re-consent</button></div>`;
+          `<button class="btn btn-sm btn-primary" onclick="setConsent('${purpose}', 'grant')">Grant v${currentNoticeVer}</button></div>`;
       } else {
         reconsentContainer.innerHTML = '';
       }

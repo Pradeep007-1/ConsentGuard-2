@@ -143,15 +143,16 @@ def record_consent():
         connection.execute(
             """
             INSERT INTO consents
-                (user_id, purpose, granted, notice_version, last_action, updated_at)
-            VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+                (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
             ON CONFLICT(user_id, purpose) DO UPDATE SET
                 granted = excluded.granted,
                 notice_version = excluded.notice_version,
+                notice_hash = excluded.notice_hash,
                 last_action = excluded.last_action,
                 updated_at = excluded.updated_at
             """,
-            (user_id, purpose, granted, NOTICE_VERSION, action),
+            (user_id, purpose, granted, NOTICE_VERSION, NOTICE_HASH, action),
         )
 
         append_audit_event(
@@ -217,7 +218,7 @@ def data_access():
     with get_connection() as connection:
         row = connection.execute(
             """
-            SELECT granted, notice_version, last_action FROM consents
+            SELECT granted, notice_version, notice_hash, last_action FROM consents
             WHERE user_id = ? AND purpose = ?
             """,
             (user_id, purpose),
@@ -237,13 +238,13 @@ def data_access():
             else:
                 reason_code = "WITHDRAWN"
                 reason = "Consent is currently withdrawn or revoked."
-        elif row["notice_version"] != NOTICE_VERSION:
+        elif row["notice_version"] != NOTICE_VERSION or (row["notice_hash"] and NOTICE_HASH and row["notice_hash"] != NOTICE_HASH):
             allowed = False
             http_status = 403
             reason_code = "NOTICE_MISMATCH"
             reason = (
                 f"Consent was granted under notice v{row['notice_version']}. "
-                f"Active notice is now v{NOTICE_VERSION}. A notice change requires fresh consent."
+                f"Active notice is now v{NOTICE_VERSION}. A notice change requires fresh consent (NOTICE_OUTDATED_RECONSENT_REQUIRED)."
             )
         else:
             allowed = True
@@ -270,6 +271,7 @@ def data_access():
             "http_status": http_status,
             "reason_code": reason_code,
             "reason": reason,
+            "error_code": "NOTICE_OUTDATED_RECONSENT_REQUIRED" if reason_code == "NOTICE_MISMATCH" else reason_code,
             "message": "Request denied: current active consent is required.",
             "user_id": user_id,
             "purpose": purpose,
@@ -278,6 +280,7 @@ def data_access():
             "notice_version": NOTICE_VERSION,
             "notice_hash": NOTICE_HASH,
         }), http_status
+
 
     return jsonify({
         "allowed": True,
