@@ -59,6 +59,11 @@ def dashboard():
     return send_file(ROOT_DIR / "index.html")
 
 
+@app.get("/dashboard.html")
+def dashboard_html():
+    return send_file(ROOT_DIR / "index.html")
+
+
 @app.get("/privacy-illustration.png")
 def illustration():
     return send_file(ROOT_DIR / "privacy-illustration.png")
