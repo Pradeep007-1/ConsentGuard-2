@@ -13,12 +13,24 @@ DATABASE_PATH = Path(__file__).parent / "consentguard.db"
 
 def get_database_url():
     """Returns database URL from environment variables, supporting Neon, Vercel Postgres, Supabase."""
-    return (
+    url = (
         os.environ.get("DATABASE_URL")
         or os.environ.get("POSTGRES_URL")
         or os.environ.get("POSTGRES_PRISMA_URL")
+        or os.environ.get("DATABASE_URL_UNPOOLED")
+        or os.environ.get("POSTGRES_URL_NON_POOLING")
+        or os.environ.get("NEON_DATABASE_URL")
         or ""
     ).strip()
+    if not url:
+        host = os.environ.get("PGHOST")
+        user = os.environ.get("PGUSER")
+        password = os.environ.get("PGPASSWORD")
+        database_name = os.environ.get("PGDATABASE", "neondb")
+        port = os.environ.get("PGPORT", "5432")
+        if host and user and password:
+            url = f"postgresql://{user}:{password}@{host}:{port}/{database_name}?sslmode=require"
+    return url
 
 
 GENESIS_PREV_HASH = "0" * 64
