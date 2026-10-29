@@ -92,23 +92,58 @@ def get_authenticated_user():
     return None
 
 
+def is_registered_user(user_id):
+    """
+    Checks whether a user_id corresponds to an existing registered or demo account.
+    """
+    if not user_id:
+        return False
+    try:
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT id FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            return bool(row)
+    except Exception:
+        return False
+
+
 def resolve_subject(req_user=None, source="user"):
     """
     Derives the subject user_id with server-side validation.
     Returns (user_id, error_response).
     """
     auth_user = get_authenticated_user()
-    is_test_call = bool(
+    is_test_source = bool(
         source == "test"
         or request.args.get("source") == "test"
         or request.headers.get("X-Test-Source") == "test"
-        or app.config.get("TESTING")
     )
+    is_testing_env = bool(app.config.get("TESTING") or is_test_source)
 
     # 1. If user is authenticated via server session:
     if auth_user:
         auth_id = auth_user["id"]
-        # If client supplied a different user_id, block cross-user access
+
+        # Case A: Explicit test invocation (e.g. from in-browser diagnostic runner)
+        if is_test_source:
+            if req_user and req_user != auth_id:
+                # Security boundary: If req_user is another registered real user,
+                # block tampering with real user accounts even if source='test' is claimed.
+                if is_registered_user(req_user):
+                    return None, (
+                        jsonify({
+                            "error": "Forbidden: Cannot access or modify data for another user.",
+                            "reason_code": "FORBIDDEN_CROSS_USER_ACCESS",
+                        }),
+                        403,
+                    )
+                # Legitimate synthetic test identity (e.g. suite-user-*, test-user, etc.)
+                return req_user, None
+            return req_user or auth_id, None
+
+        # Case B: Normal application request from authenticated user:
         if req_user and req_user != auth_id:
             return None, (
                 jsonify({
@@ -119,12 +154,12 @@ def resolve_subject(req_user=None, source="user"):
             )
         return auth_id, None
 
-    # 2. If running within automated test suite or diagnostic tests:
-    if is_test_call:
+    # 2. If running within automated test suite or diagnostic tests without auth session:
+    if is_testing_env:
         effective = req_user or "test-user"
         return effective, None
 
-    # 3. Unauthenticated visitor:
+    # 3. Unauthenticated visitor attempting normal access:
     return None, (
         jsonify({
             "error": "Authentication required. Please sign in or register.",
@@ -788,13 +823,23 @@ def get_audit():
     # Enforce user boundary
     if auth_user:
         auth_id = auth_user["id"]
-        if req_user and req_user != auth_id and req_user.lower() != "all":
+        # If test mode and req_user is a synthetic test subject:
+        if is_test_mode and req_user and req_user != auth_id:
+            if is_registered_user(req_user):
+                return jsonify({
+                    "error": "Forbidden: Cannot view audit logs for another user.",
+                    "reason_code": "FORBIDDEN_CROSS_USER_ACCESS",
+                }), 403
+            query += " AND user_id = ?"
+            params.append(req_user)
+        elif req_user and req_user != auth_id and req_user.lower() != "all":
             return jsonify({
                 "error": "Forbidden: Cannot view audit logs for another user.",
                 "reason_code": "FORBIDDEN_CROSS_USER_ACCESS",
             }), 403
-        query += " AND user_id = ?"
-        params.append(auth_id)
+        else:
+            query += " AND user_id = ?"
+            params.append(auth_id)
     elif req_user and req_user.lower() != "all":
         query += " AND user_id = ?"
         params.append(req_user)
