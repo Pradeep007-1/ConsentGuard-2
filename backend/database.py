@@ -441,6 +441,22 @@ def seed_demo_users(connection):
             (uid, name, email, pw_hash, is_demo, now_str),
         )
 
+    # Seed initial baseline consents for demo-user under DEFAULT_NOTICE_VERSION (v1.0)
+    demo_consents = [
+        ("demo-user", "Analytics", 1, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, "grant"),
+        ("demo-user", "Marketing", 1, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, "grant"),
+        ("demo-user", "Service Improvement", 1, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, "grant"),
+    ]
+    for uid, purpose, granted, ver, h, action in demo_consents:
+        connection.execute(
+            """
+            INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT (user_id, purpose) DO NOTHING
+            """,
+            (uid, purpose, granted, ver, h, action, now_str),
+        )
+
 
 def initialize_database():
     with get_connection() as connection:

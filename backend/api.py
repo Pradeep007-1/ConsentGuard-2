@@ -450,6 +450,17 @@ def demo_login():
             }), 404
 
         user = dict(user_row)
+        if demo_id == "demo-user":
+            now_str_demo = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+            for p in ["Analytics", "Marketing", "Service Improvement"]:
+                connection.execute(
+                    """
+                    INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+                    VALUES (?, ?, 1, ?, ?, 'grant', ?)
+                    ON CONFLICT (user_id, purpose) DO NOTHING
+                    """,
+                    ("demo-user", p, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, now_str_demo),
+                )
         append_audit_event(
             connection=connection,
             user_id=user["id"],
@@ -660,12 +671,29 @@ def get_consents():
     if err:
         return err
 
+    active_ver, _, active_h = load_active_notice()
+
     with get_connection() as connection:
         rows = connection.execute(
             "SELECT * FROM consents WHERE user_id = ? ORDER BY purpose",
             (user_id,),
         ).fetchall()
-    return jsonify([dict(row) for row in rows])
+
+    results = []
+    for row in rows:
+        r = dict(row)
+        r["active_notice_version"] = active_ver
+        r["active_notice_hash"] = active_h
+        r["needs_reconsent"] = bool(
+            r["granted"] == 1
+            and (
+                r["notice_version"] != active_ver
+                or (r.get("notice_hash") and active_h and r["notice_hash"] != active_h)
+            )
+        )
+        results.append(r)
+
+    return jsonify(results)
 
 
 @app.post("/api/consents")
@@ -1046,6 +1074,14 @@ def reset_demo():
         else:
             target_user = "demo-user"
             connection.execute("DELETE FROM consents WHERE user_id = 'demo-user'")
+            for p in ["Analytics", "Marketing", "Service Improvement"]:
+                connection.execute(
+                    """
+                    INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+                    VALUES (?, ?, 1, ?, ?, 'grant', ?)
+                    """,
+                    ("demo-user", p, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, now_str),
+                )
 
         append_audit_event(
             connection=connection,

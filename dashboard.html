@@ -2288,12 +2288,20 @@ function setAuthenticatedUser(user, token) {
   ['header-user-select', 'sim-user', 'sim-page-user', 'audit-user-filter'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
+      // Clean up any stale custom user options from prior logins
+      el.querySelectorAll('option').forEach(o => {
+        if (!['demo-user', 'user1', 'user2', 'user3', 'all', ''].includes(o.value) && o.value !== user.id) {
+          o.remove();
+        }
+      });
       let opt = el.querySelector(`option[value="${user.id}"]`);
       if (!opt) {
         opt = document.createElement('option');
         opt.value = user.id;
         opt.textContent = `${user.name || user.id} (Active)`;
         el.insertBefore(opt, el.firstChild);
+      } else {
+        opt.textContent = `${user.name || user.id} (Active)`;
       }
       el.value = user.id;
     }
@@ -2301,6 +2309,13 @@ function setAuthenticatedUser(user, token) {
 
   const menu = document.getElementById('user-dropdown-menu');
   if (menu) {
+    // Remove stale custom items
+    menu.querySelectorAll('.custom-dropdown-item').forEach(it => {
+      const v = it.dataset.value;
+      if (!['demo-user', 'user1', 'user2', 'user3'].includes(v) && v !== user.id) {
+        it.remove();
+      }
+    });
     let item = menu.querySelector(`[data-value="${user.id}"]`);
     if (!item) {
       item = document.createElement('div');
@@ -2332,6 +2347,27 @@ function setUnauthenticated() {
     localStorage.removeItem('cg_user');
     localStorage.removeItem('cg_token');
   } catch(e) {}
+
+  ['header-user-select', 'sim-user', 'sim-page-user', 'audit-user-filter'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      el.querySelectorAll('option').forEach(o => {
+        if (!['demo-user', 'user1', 'user2', 'user3', 'all', ''].includes(o.value)) {
+          o.remove();
+        }
+      });
+      el.value = 'demo-user';
+    }
+  });
+
+  const menu = document.getElementById('user-dropdown-menu');
+  if (menu) {
+    menu.querySelectorAll('.custom-dropdown-item').forEach(it => {
+      if (!['demo-user', 'user1', 'user2', 'user3'].includes(it.dataset.value)) {
+        it.remove();
+      }
+    });
+  }
 
   const authContainer = document.getElementById('auth-container');
   const appLayout = document.getElementById('app-layout');
@@ -2691,7 +2727,7 @@ function renderPurposes() {
     }
 
     const noticeHashMismatch = consent?.notice_hash && state.notice?.notice_hash && consent.notice_hash !== state.notice.notice_hash;
-    const isOutdated = consent && Number(consent.granted) === 1 && (consent.notice_version !== currentNoticeVer || noticeHashMismatch);
+    const isOutdated = consent && (consent.needs_reconsent === true || (Number(consent.granted) === 1 && (consent.notice_version !== currentNoticeVer || noticeHashMismatch)));
 
     if (isOutdated) {
       label = 'Re-consent Required';
