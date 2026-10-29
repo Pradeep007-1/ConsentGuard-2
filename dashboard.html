@@ -2235,7 +2235,14 @@ const state = {
   authToken: localStorage.getItem('cg_token') || null,
   consents: [],
   audit: [],
-  notice: null,
+  notice: (() => {
+    try {
+      const v = localStorage.getItem('cg_notice_ver');
+      const h = localStorage.getItem('cg_notice_hash');
+      if (v) return { notice_version: v, notice_hash: h || '' };
+    } catch(e) {}
+    return null;
+  })(),
   notices: [],
   inFlight: false,
   theme: localStorage.getItem('cg-theme') || 'light'
@@ -2695,7 +2702,7 @@ function consentFor(purpose) {
 
 // Render Purposes & Dashboard Summaries
 function renderPurposes() {
-  const currentNoticeVer = state.notice?.notice_version || '1.0';
+  const currentNoticeVer = state.notice?.notice_version || (state.consents && state.consents[0]?.active_notice_version) || localStorage.getItem('cg_notice_ver') || '1.0';
   const displayUser = state.currentUserObj ? (state.currentUserObj.name || state.currentUserObj.id) : (state.currentUser || 'User');
 
   document.querySelectorAll('.active-user-label').forEach(el => {
@@ -2995,6 +3002,10 @@ async function checkBackendHealth() {
 // Notice DOM Updater
 function updateNoticeDom() {
   if (!state.notice) return;
+  try {
+    if (state.notice.notice_version) localStorage.setItem('cg_notice_ver', state.notice.notice_version);
+    if (state.notice.notice_hash) localStorage.setItem('cg_notice_hash', state.notice.notice_hash);
+  } catch(e) {}
   const verText = 'v' + state.notice.notice_version;
   const hPill = document.getElementById('header-notice-pill');
   if (hPill) hPill.textContent = verText;
@@ -3129,6 +3140,14 @@ async function refreshAll(retryCount = 0, options = {}) {
 
     state.consents = consentsRes.data || [];
     state.audit = auditRes.data || [];
+
+    if (state.consents.length > 0 && state.consents[0].active_notice_version && !state.notice) {
+      state.notice = {
+        notice_version: state.consents[0].active_notice_version,
+        notice_hash: state.consents[0].active_notice_hash || ''
+      };
+      updateNoticeDom();
+    }
 
     if (results.length > 2) {
       const noticeRes = results[2];
