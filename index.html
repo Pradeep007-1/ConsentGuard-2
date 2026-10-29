@@ -1468,7 +1468,7 @@ table.feed-table tr:hover td {
 
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileSidebar()"></div>
 
-<div class="app-layout" id="app-layout">
+<div class="app-layout" id="app-layout" style="display:none;">
   <!-- ==================== SIDEBAR ==================== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
@@ -1579,7 +1579,7 @@ table.feed-table tr:hover td {
               <svg class="check-icon" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>
             </div>
           </div>
-          <select id="header-user-select" class="visually-hidden-select" tabindex="-1">
+          <select id="header-user-select" class="visually-hidden-select" tabindex="-1" onchange="onUserChange(this.value)">
             <option value="demo-user">demo-user</option>
             <option value="user1">user1</option>
             <option value="user2">user2</option>
@@ -2278,10 +2278,11 @@ function switchAuthTab(tab) {
 }
 
 function setAuthenticatedUser(user, token) {
+  if (!user || !user.id) return;
   state.authenticated = true;
   state.currentUserObj = user;
   state.currentUser = user.id;
-  state.authToken = token || user.id;
+  state.authToken = (token && token !== 'null' && token !== 'undefined') ? token : user.id;
 
   try {
     localStorage.setItem('cg_user', JSON.stringify(user));
@@ -2309,6 +2310,22 @@ function setAuthenticatedUser(user, token) {
       el.value = user.id;
     }
   });
+
+  const menu = document.getElementById('user-dropdown-menu');
+  if (menu) {
+    let item = menu.querySelector(`[data-value="${user.id}"]`);
+    if (!item) {
+      item = document.createElement('div');
+      item.className = 'custom-dropdown-item';
+      item.dataset.value = user.id;
+      item.onclick = () => onUserChange(user.id);
+      item.innerHTML = `<span>${escapeHtml(user.name || user.id)}</span><svg class="check-icon" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5"/></svg>`;
+      menu.insertBefore(item, menu.firstChild);
+    }
+    menu.querySelectorAll('.custom-dropdown-item').forEach(it => {
+      it.classList.toggle('active', it.dataset.value === user.id);
+    });
+  }
 
   document.querySelectorAll('.active-user-label').forEach(el => {
     el.textContent = `${user.name || user.id}`;
@@ -2341,7 +2358,11 @@ function setUnauthenticated() {
 
 async function checkAuthStatus() {
   try {
-    const savedToken = localStorage.getItem('cg_token');
+    let savedToken = localStorage.getItem('cg_token');
+    if (savedToken === 'null' || savedToken === 'undefined' || !savedToken) {
+      savedToken = null;
+      try { localStorage.removeItem('cg_token'); } catch(e) {}
+    }
     const headers = {};
     if (savedToken) {
       headers['Authorization'] = 'Bearer ' + savedToken;
@@ -2563,34 +2584,16 @@ document.addEventListener('click', (e) => {
 });
 
 async function onUserChange(newUser) {
+  if (!newUser) return;
   if (['demo-user', 'user1', 'user2', 'user3'].includes(newUser)) {
     await quickDemoLogin(newUser);
-  } else {
-    state.currentUser = newUser;
-    const label = document.getElementById('user-dropdown-selected-label');
-    if (label) label.textContent = newUser;
-    const headerSelect = document.getElementById('header-user-select');
-    if (headerSelect) headerSelect.value = newUser;
-    const simUser = document.getElementById('sim-user');
-    if (simUser) simUser.value = newUser;
-    const pageUser = document.getElementById('sim-page-user');
-    if (pageUser) pageUser.value = newUser;
-
-    document.querySelectorAll('.active-user-label').forEach(el => {
-      el.textContent = newUser;
-    });
-
-    document.querySelectorAll('#user-dropdown-menu .custom-dropdown-item').forEach(item => {
-      item.classList.toggle('active', item.dataset.value === newUser);
-    });
-
+  } else if (state.currentUserObj && state.currentUserObj.id === newUser) {
+    setAuthenticatedUser(state.currentUserObj, state.authToken);
     const dropdown = document.getElementById('user-custom-dropdown');
     if (dropdown) dropdown.classList.remove('open');
-    const btn = document.getElementById('user-dropdown-btn');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-
-    showToast('Switched active user to: ' + newUser);
     await refreshAll();
+  } else {
+    showToast('To switch to account ' + newUser + ', please sign in with that account.', true);
   }
 }
 
@@ -2636,8 +2639,11 @@ window.addEventListener('load', () => {
 // JSON API Fetch Helper
 async function requestJson(path, options={}) {
   const headers = { ...(options.headers || {}) };
-  if (state.authToken && !headers['Authorization']) {
-    headers['Authorization'] = 'Bearer ' + state.authToken;
+  let token = state.authToken || localStorage.getItem('cg_token');
+  if (token && token !== 'null' && token !== 'undefined') {
+    if (!headers['Authorization']) {
+      headers['Authorization'] = 'Bearer ' + token;
+    }
   }
   const opts = {
     ...options,
@@ -2992,11 +2998,11 @@ async function refreshConsentState() {
   try {
     const healthOk = await checkBackendHealth();
     if (!healthOk) {
-      throw new Error('Backend is offline or SQLite database is unavailable.');
+      throw new Error('Backend is offline or database is unavailable.');
     }
 
     const [consentsRes, noticeRes] = await Promise.all([
-      requestJson('/consents?user_id=' + encodeURIComponent(state.currentUser)),
+      requestJson('/consents'),
       requestJson('/notice')
     ]);
 
@@ -3007,7 +3013,7 @@ async function refreshConsentState() {
     }
 
     renderPurposes();
-    showToast('Consent state refreshed for ' + state.currentUser + '.');
+    showToast('Consent state refreshed.');
   } catch (err) {
     showToast('Failed to refresh consent state: ' + err.message, true);
   } finally {
@@ -3035,15 +3041,17 @@ async function refreshAnalyticsMetrics() {
   try {
     const healthOk = await checkBackendHealth();
     if (!healthOk) {
-      throw new Error('Backend is offline or SQLite database is unavailable.');
+      throw new Error('Backend is offline or database is unavailable.');
     }
 
-    const [auditRes, verifyRes, noticeRes] = await Promise.all([
+    const [consentsRes, auditRes, verifyRes, noticeRes] = await Promise.all([
+      requestJson('/consents'),
       requestJson('/audit?limit=200'),
       requestJson('/audit/verify'),
       requestJson('/notice')
     ]);
 
+    state.consents = consentsRes.data || [];
     state.audit = auditRes.data || [];
     if (noticeRes.data) {
       state.notice = noticeRes.data;
@@ -3081,9 +3089,8 @@ async function refreshAll() {
   }
 
   try {
-    const uidParam = state.currentUser ? '?user_id=' + encodeURIComponent(state.currentUser) : '';
     const [consentsRes, auditRes, noticeRes, noticesRes, verifyRes] = await Promise.all([
-      requestJson('/consents' + uidParam),
+      requestJson('/consents'),
       requestJson('/audit?limit=200'),
       requestJson('/notice'),
       requestJson('/notices'),
@@ -3123,15 +3130,22 @@ async function refreshAll() {
 async function setConsent(purpose, action) {
   if (!PURPOSES.includes(purpose)) return;
   if (state.inFlight) return;
+  if (!state.authenticated || !state.currentUser) {
+    showToast('Authentication required. Please sign in or register.', true);
+    setUnauthenticated();
+    return;
+  }
   state.inFlight = true;
 
-  const currentUid = state.currentUserObj ? state.currentUserObj.id : state.currentUser;
+  const manageCard = document.getElementById('card-purpose-' + purpose.replace(/\s+/g, '-'));
+  const btns = manageCard ? manageCard.querySelectorAll('button') : [];
+  btns.forEach(b => b.disabled = true);
 
   try {
     const { response, data } = await requestJson('/consents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: currentUid, purpose, action, source: 'user' })
+      body: JSON.stringify({ purpose, action, source: 'user' })
     });
 
     if (response.status === 201) {
@@ -3143,13 +3157,14 @@ async function setConsent(purpose, action) {
   } catch(err) {
     showToast(err.message || 'Error communicating with backend', true);
   } finally {
+    btns.forEach(b => b.disabled = false);
     state.inFlight = false;
   }
 }
 
 // Data Access Simulator
 async function simulateAccess() {
-  const currentUid = state.currentUserObj ? state.currentUserObj.id : state.currentUser;
+  const currentUid = state.currentUserObj ? state.currentUserObj.id : (state.currentUser || 'demo-user');
   const user = document.getElementById('sim-user').value.trim() || currentUid;
   const purpose = document.getElementById('sim-purpose').value;
   const resultBox = document.getElementById('sim-result-box');
@@ -3321,8 +3336,9 @@ async function runLifecycleTests() {
   const post = async (path, payload) => {
     payload.source = 'test';
     const headers = { 'Content-Type': 'application/json', 'X-Test-Source': 'test' };
-    if (state.authToken) {
-      headers['Authorization'] = 'Bearer ' + state.authToken;
+    let token = state.authToken || localStorage.getItem('cg_token');
+    if (token && token !== 'null' && token !== 'undefined') {
+      headers['Authorization'] = 'Bearer ' + token;
     }
     const response = await fetch(API + path, {
       method: 'POST',
@@ -3422,6 +3438,7 @@ async function runLifecycleTests() {
     });
 
   } finally {
+    try { await post('/notice/reset', {}); } catch(e) {}
     body.innerHTML = results.map((r, i) =>
       '<tr>' +
         '<td><strong style="color:var(--primary); font-weight:700;">' + (i + 1) + '</strong></td>' +

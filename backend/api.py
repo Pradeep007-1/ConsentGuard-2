@@ -100,21 +100,28 @@ def get_authenticated_user():
     user_id = None
     auth_header = request.headers.get("Authorization", "").strip()
     if auth_header.startswith("Bearer "):
-        user_id = auth_header[7:].strip()
-
-    if not user_id:
-        user_id = session.get("user_id")
-
-    if not user_id:
-        return None
+        token_candidate = auth_header[7:].strip()
+        if token_candidate and token_candidate.lower() not in ("null", "undefined", "none", ""):
+            user_id = token_candidate
 
     with get_connection() as connection:
-        row = connection.execute(
-            "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
-            (user_id,),
-        ).fetchone()
-        if row:
-            return dict(row)
+        if user_id:
+            row = connection.execute(
+                "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+            if row:
+                return dict(row)
+
+        session_uid = session.get("user_id")
+        if session_uid and session_uid != user_id:
+            row = connection.execute(
+                "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
+                (session_uid,),
+            ).fetchone()
+            if row:
+                return dict(row)
+
     return None
 
 
@@ -122,13 +129,13 @@ def is_registered_user(user_id):
     """
     Checks whether a user_id corresponds to an existing registered or demo account.
     """
-    if not user_id:
+    if not user_id or str(user_id).lower() in ("null", "undefined", "none", ""):
         return False
     try:
         with get_connection() as connection:
             row = connection.execute(
                 "SELECT id FROM users WHERE id = ?",
-                (user_id,),
+                (str(user_id),),
             ).fetchone()
             return bool(row)
     except Exception:
@@ -148,7 +155,11 @@ def resolve_subject(req_user=None, source="user"):
     )
     is_testing_env = bool(app.config.get("TESTING") or is_test_source)
 
-    # 1. If user is authenticated via server session:
+    # Normalize client-side empty/null string representations
+    if req_user in ("null", "undefined", "None", ""):
+        req_user = None
+
+    # 1. If user is authenticated via server session or verified bearer token:
     if auth_user:
         auth_id = auth_user["id"]
 
@@ -631,14 +642,10 @@ def record_consent():
     data = request.get_json(silent=True) or {}
     source = data.get("source", "user")
     req_user = data.get("user_id")
-
-    user_id, err = resolve_subject(req_user=req_user, source=source)
-    if err:
-        return err
-
     purpose = data.get("purpose")
     action = data.get("action")
 
+    # 1. Parameter Validation FIRST
     if purpose not in PURPOSES:
         return jsonify({
             "error": "Invalid purpose",
@@ -651,6 +658,11 @@ def record_consent():
             "error": "Invalid action. Allowed actions: grant, withdraw, deny",
             "reason_code": "INVALID_ACTION",
         }), 400
+
+    # 2. Authorization & Ownership Validation SECOND
+    user_id, err = resolve_subject(req_user=req_user, source=source)
+    if err:
+        return err
 
     granted = 1 if action == "grant" else 0
     if action == "grant":
@@ -709,30 +721,31 @@ def data_access():
     data = request.get_json(silent=True) or {}
     source = data.get("source", "user")
     req_user = data.get("user_id")
-
-    user_id, err = resolve_subject(req_user=req_user, source=source)
-    if err:
-        return err
-
     purpose = data.get("purpose")
 
+    # 1. Parameter Validation FIRST
     if purpose not in PURPOSES:
         reason_code = "INVALID_PURPOSE"
         http_status = 400
         reason = "Invalid purpose"
-        with get_connection() as connection:
-            append_audit_event(
-                connection=connection,
-                user_id=user_id,
-                purpose=str(purpose),
-                action="data_access_denied",
-                http_status=http_status,
-                reason_code=reason_code,
-                notice_version=NOTICE_VERSION,
-                notice_hash=NOTICE_HASH,
-                source=source,
-                details="Request rejected: unrecognized data processing purpose.",
-            )
+        auth_user = get_authenticated_user()
+        audit_uid = req_user or (auth_user["id"] if auth_user else "unknown")
+        try:
+            with get_connection() as connection:
+                append_audit_event(
+                    connection=connection,
+                    user_id=str(audit_uid),
+                    purpose=str(purpose),
+                    action="data_access_denied",
+                    http_status=http_status,
+                    reason_code=reason_code,
+                    notice_version=NOTICE_VERSION,
+                    notice_hash=NOTICE_HASH,
+                    source=source,
+                    details="Request rejected: unrecognized data processing purpose.",
+                )
+        except Exception:
+            pass
         return jsonify({
             "allowed": False,
             "http_status": 400,
@@ -741,6 +754,11 @@ def data_access():
             "error": "Invalid purpose",
             "valid_purposes": sorted(PURPOSES),
         }), 400
+
+    # 2. Authorization & Ownership Validation SECOND
+    user_id, err = resolve_subject(req_user=req_user, source=source)
+    if err:
+        return err
 
     with get_connection() as connection:
         row = connection.execute(
@@ -833,9 +851,16 @@ def data_access():
 def get_audit():
     source = request.args.get("source", "")
     req_user = request.args.get("user_id")
+    if req_user in ("null", "undefined", "None", ""):
+        req_user = None
 
     auth_user = get_authenticated_user()
-    is_test_mode = bool(app.config.get("TESTING") or source == "test")
+    is_test_source = bool(
+        source == "test"
+        or request.args.get("source") == "test"
+        or request.headers.get("X-Test-Source") == "test"
+    )
+    is_test_mode = bool(app.config.get("TESTING") or is_test_source)
 
     if not auth_user and not is_test_mode:
         return jsonify({
