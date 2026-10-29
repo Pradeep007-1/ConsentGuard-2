@@ -3107,44 +3107,59 @@ async function refreshAnalyticsMetrics() {
 }
 
 // Main Data Refresh
-async function refreshAll(retryCount = 0) {
+async function refreshAll(retryCount = 0, options = {}) {
   // Check health asynchronously without blocking user interactions
   checkBackendHealth().catch(() => {});
 
   try {
-    const [consentsRes, auditRes, noticeRes, noticesRes, verifyRes] = await Promise.all([
+    const fetches = [
       requestJson('/consents'),
-      requestJson('/audit?limit=100'),
-      requestJson('/notice'),
-      requestJson('/notices'),
-      requestJson('/audit/verify')
-    ]);
+      requestJson('/audit?limit=100')
+    ];
+
+    // Only fetch notice definitions if not yet cached or explicitly requested
+    if (!state.notice || options.includeNotices) {
+      fetches.push(requestJson('/notice'));
+      fetches.push(requestJson('/notices'));
+    }
+
+    const results = await Promise.all(fetches);
+    const consentsRes = results[0];
+    const auditRes = results[1];
 
     state.consents = consentsRes.data || [];
     state.audit = auditRes.data || [];
 
-    if (noticeRes.data) {
-      state.notice = noticeRes.data;
-      updateNoticeDom();
-    }
-
-    if (noticesRes.data) {
-      state.notices = noticesRes.data;
-      loadNoticeHistory();
+    if (results.length > 2) {
+      const noticeRes = results[2];
+      const noticesRes = results[3];
+      if (noticeRes && noticeRes.data) {
+        state.notice = noticeRes.data;
+        updateNoticeDom();
+      }
+      if (noticesRes && noticesRes.data) {
+        state.notices = noticesRes.data;
+        loadNoticeHistory();
+      }
     }
 
     renderPurposes();
     renderAudit();
 
-    const chainEl = document.getElementById('analytics-chain-status');
-    if (chainEl && verifyRes.data) {
-      const isIntact = verifyRes.data.status === 'intact';
-      chainEl.textContent = isIntact ? '100% Intact' : 'Compromised';
-      chainEl.className = 'summary-card-number ' + (isIntact ? 'green' : 'rose');
+    // Verify ledger in background without blocking UI
+    if (!options.skipVerify) {
+      requestJson('/audit/verify').then(verifyRes => {
+        const chainEl = document.getElementById('analytics-chain-status');
+        if (chainEl && verifyRes.data) {
+          const isIntact = verifyRes.data.status === 'intact';
+          chainEl.textContent = isIntact ? '100% Intact' : 'Compromised';
+          chainEl.className = 'summary-card-number ' + (isIntact ? 'green' : 'rose');
+        }
+      }).catch(() => {});
     }
   } catch (error) {
     if (retryCount < 1 && state.authenticated) {
-      setTimeout(() => refreshAll(retryCount + 1), 400);
+      setTimeout(() => refreshAll(retryCount + 1, options), 400);
       return;
     }
     checkBackendHealth().catch(() => {});
@@ -3153,21 +3168,37 @@ async function refreshAll(retryCount = 0) {
 }
 
 
-// Consent Action Trigger (Grant / Deny / Withdraw)
+// Consent Action Trigger (Grant / Deny / Withdraw) - Instant Optimistic UI
 async function setConsent(purpose, action) {
   if (!PURPOSES.includes(purpose)) return;
-  if (state.inFlight) return;
   if (!state.authenticated || !state.currentUser) {
     showToast('Authentication required. Please sign in or register.', true);
     setUnauthenticated();
     return;
   }
-  state.inFlight = true;
 
-  const manageCard = document.getElementById('card-purpose-' + purpose.replace(/\s+/g, '-'));
-  const btns = manageCard ? manageCard.querySelectorAll('button') : [];
-  btns.forEach(b => b.disabled = true);
+  // Snapshot for instant rollback on error
+  const prevConsents = JSON.parse(JSON.stringify(state.consents));
+  const currentUid = state.currentUserObj ? state.currentUserObj.id : (state.currentUser || 'demo-user');
+  const activeVer = state.notice?.notice_version || '2.0';
+  const activeHash = state.notice?.notice_hash || '';
 
+  // 1. Instant Optimistic UI Update (<1ms, no freezing)
+  let target = state.consents.find(c => (c.user_id === currentUid || c.user_id === state.currentUser) && c.purpose === purpose);
+  if (!target) {
+    target = { user_id: currentUid, purpose: purpose };
+    state.consents.push(target);
+  }
+  target.granted = action === 'grant' ? 1 : 0;
+  target.last_action = action;
+  target.notice_version = activeVer;
+  target.notice_hash = activeHash;
+  target.needs_reconsent = false;
+  target.updated_at = new Date().toISOString();
+
+  renderPurposes();
+
+  // 2. Persist to backend
   try {
     const { response, data } = await requestJson('/consents', {
       method: 'POST',
@@ -3176,16 +3207,31 @@ async function setConsent(purpose, action) {
     });
 
     if (response.status === 201) {
+      if (data) {
+        Object.assign(target, data);
+        target.needs_reconsent = false;
+        renderPurposes();
+      }
       showToast(`${purpose} consent ${action}ed successfully.`);
-      await refreshAll();
+
+      // Sync audit trail in background without blocking
+      requestJson('/audit?limit=100').then(res => {
+        if (res.data) {
+          state.audit = res.data;
+          renderAudit();
+        }
+      }).catch(() => {});
     } else {
+      // Revert optimistic change on server rejection
+      state.consents = prevConsents;
+      renderPurposes();
       showToast(data.error || 'Failed to save consent decision.', true);
     }
   } catch(err) {
+    // Revert optimistic change on network failure
+    state.consents = prevConsents;
+    renderPurposes();
     showToast(err.message || 'Error communicating with backend', true);
-  } finally {
-    btns.forEach(b => b.disabled = false);
-    state.inFlight = false;
   }
 }
 
@@ -3241,7 +3287,14 @@ async function simulateAccess() {
       reasonEl.textContent = explanation;
     }
 
-    await refreshAll();
+    // Refresh audit events quickly to update access log and counters
+    requestJson('/audit?limit=100').then(res => {
+      if (res.data) {
+        state.audit = res.data;
+        renderAudit();
+        renderPurposes();
+      }
+    }).catch(() => {});
   } catch(err) {
     resultBox.className = 'sim-result-box denied';
     titleEl.textContent = '✕ EVALUATION FAILED';
@@ -3284,7 +3337,7 @@ async function bumpNotice() {
       })
     });
     showToast('Privacy Notice updated to v2.0! Stale consents will now be blocked until re-consented.');
-    await refreshAll();
+    await refreshAll(0, { includeNotices: true });
   } catch(e) {
     showToast(e.message, true);
   }
@@ -3298,7 +3351,7 @@ async function resetNotice() {
       body: JSON.stringify({ source: 'user' })
     });
     showToast('Privacy Notice reset to default v1.0.');
-    await refreshAll();
+    await refreshAll(0, { includeNotices: true });
   } catch(e) {
     showToast(e.message, true);
   }
