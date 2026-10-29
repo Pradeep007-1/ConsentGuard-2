@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -129,13 +130,20 @@ def get_authenticated_user(existing_conn=None):
                 return dict(row)
         return None
 
-    try:
-        if existing_conn is not None:
+    if existing_conn is not None:
+        try:
             return _query(existing_conn)
-        with get_connection() as connection:
-            return _query(connection)
-    except Exception:
-        return None
+        except Exception:
+            return None
+
+    for attempt in range(2):
+        try:
+            with get_connection() as connection:
+                return _query(connection)
+        except Exception:
+            if attempt == 0:
+                time.sleep(0.3)
+    return None
 
 
 def is_registered_user(user_id):

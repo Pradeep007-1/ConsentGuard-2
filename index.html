@@ -2655,7 +2655,9 @@ async function requestJson(path, options={}) {
   const response = await fetch(API + path, opts);
   const data = await response.json().catch(() => ({}));
   if (response.status === 401) {
-    setUnauthenticated();
+    if (path.includes('/auth/me')) {
+      setUnauthenticated();
+    }
     throw new Error(data.error || 'Authentication required. Please sign in or register.');
   }
   if (!response.ok && response.status !== 403 && response.status !== 400 && response.status !== 409) {
@@ -3083,7 +3085,7 @@ async function refreshAnalyticsMetrics() {
 }
 
 // Main Data Refresh
-async function refreshAll() {
+async function refreshAll(retryCount = 0) {
   // Check health asynchronously without blocking user interactions
   checkBackendHealth().catch(() => {});
 
@@ -3119,8 +3121,12 @@ async function refreshAll() {
       chainEl.className = 'summary-card-number ' + (isIntact ? 'green' : 'rose');
     }
   } catch (error) {
+    if (retryCount < 1 && state.authenticated) {
+      setTimeout(() => refreshAll(retryCount + 1), 400);
+      return;
+    }
     checkBackendHealth().catch(() => {});
-    showToast('Error syncing with backend: ' + error.message, true);
+    showToast('Notice: ' + error.message, 'warning');
   }
 }
 

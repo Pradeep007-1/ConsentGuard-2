@@ -2,6 +2,7 @@ import hashlib
 import os
 import sqlite3
 import ssl
+import time
 import urllib.parse
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -125,15 +126,28 @@ def get_connection():
             ssl_ctx.check_hostname = False
             ssl_ctx.verify_mode = ssl.CERT_NONE
 
-        raw_conn = pg8000.dbapi.connect(
-            user=user,
-            password=password,
-            host=host,
-            port=port,
-            database=database_name,
-            ssl_context=ssl_ctx,
-            timeout=10,
-        )
+        raw_conn = None
+        last_err = None
+        for attempt in range(3):
+            try:
+                raw_conn = pg8000.dbapi.connect(
+                    user=user,
+                    password=password,
+                    host=host,
+                    port=port,
+                    database=database_name,
+                    ssl_context=ssl_ctx,
+                    timeout=15,
+                )
+                break
+            except Exception as e:
+                last_err = e
+                if attempt < 2:
+                    time.sleep(0.3 * (attempt + 1))
+
+        if raw_conn is None:
+            raise last_err
+
         wrapper = PostgresConnectionWrapper(raw_conn)
         try:
             yield wrapper
