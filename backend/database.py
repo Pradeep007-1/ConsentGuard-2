@@ -106,75 +106,43 @@ class PostgresConnectionWrapper:
         self._conn.close()
 
 
-_cached_pg_raw_conn = None
-
-
-def get_raw_pg_connection():
-    global _cached_pg_raw_conn
-    target_url = get_database_url()
-
-    if _cached_pg_raw_conn is not None:
-        try:
-            cur = _cached_pg_raw_conn.cursor()
-            cur.execute("SELECT 1")
-            cur.close()
-            return _cached_pg_raw_conn
-        except Exception:
-            try:
-                _cached_pg_raw_conn.close()
-            except Exception:
-                pass
-            _cached_pg_raw_conn = None
-
-    import pg8000.dbapi
-
-    parsed = urllib.parse.urlparse(target_url)
-    user = urllib.parse.unquote(parsed.username or "")
-    password = urllib.parse.unquote(parsed.password or "")
-    host = parsed.hostname or "localhost"
-    port = parsed.port or 5432
-    database_name = (parsed.path or "/").lstrip("/") or "postgres"
-
-    ssl_ctx = None
-    if "sslmode=require" in target_url.lower() or parsed.hostname not in ("localhost", "127.0.0.1"):
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = False
-        ssl_ctx.verify_mode = ssl.CERT_NONE
-
-    raw_conn = pg8000.dbapi.connect(
-        user=user,
-        password=password,
-        host=host,
-        port=port,
-        database=database_name,
-        ssl_context=ssl_ctx,
-        timeout=10,
-    )
-    _cached_pg_raw_conn = raw_conn
-    return raw_conn
-
-
 @contextmanager
 def get_connection():
-    global _cached_pg_raw_conn
     target_url = get_database_url()
     if target_url.startswith("postgres://") or target_url.startswith("postgresql://"):
-        raw_conn = get_raw_pg_connection()
+        import pg8000.dbapi
+
+        parsed = urllib.parse.urlparse(target_url)
+        user = urllib.parse.unquote(parsed.username or "")
+        password = urllib.parse.unquote(parsed.password or "")
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        database_name = (parsed.path or "/").lstrip("/") or "postgres"
+
+        ssl_ctx = None
+        if "sslmode=require" in target_url.lower() or parsed.hostname not in ("localhost", "127.0.0.1"):
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+
+        raw_conn = pg8000.dbapi.connect(
+            user=user,
+            password=password,
+            host=host,
+            port=port,
+            database=database_name,
+            ssl_context=ssl_ctx,
+            timeout=10,
+        )
         wrapper = PostgresConnectionWrapper(raw_conn)
         try:
             yield wrapper
             wrapper.commit()
         except Exception:
-            if _cached_pg_raw_conn is not None:
-                try:
-                    _cached_pg_raw_conn.rollback()
-                except Exception:
-                    try:
-                        _cached_pg_raw_conn.close()
-                    except Exception:
-                        pass
-                    _cached_pg_raw_conn = None
+            wrapper.rollback()
             raise
+        finally:
+            wrapper.close()
     else:
         connection = sqlite3.connect(DATABASE_PATH, timeout=10.0)
         connection.row_factory = sqlite3.Row

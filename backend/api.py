@@ -100,7 +100,7 @@ MOCK_DATA = {
 # ============================================================================
 # Authentication & User Isolation Helpers
 # ============================================================================
-def get_authenticated_user():
+def get_authenticated_user(existing_conn=None):
     """Returns the verified user dict from the Authorization header or server-side session."""
     user_id = None
     auth_header = request.headers.get("Authorization", "").strip()
@@ -109,9 +109,10 @@ def get_authenticated_user():
         if token_candidate and token_candidate.lower() not in ("null", "undefined", "none", ""):
             user_id = token_candidate
 
-    with get_connection() as connection:
+    def _query(conn):
+        nonlocal user_id
         if user_id:
-            row = connection.execute(
+            row = conn.execute(
                 "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
                 (user_id,),
             ).fetchone()
@@ -120,14 +121,21 @@ def get_authenticated_user():
 
         session_uid = session.get("user_id")
         if session_uid and session_uid != user_id:
-            row = connection.execute(
+            row = conn.execute(
                 "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
                 (session_uid,),
             ).fetchone()
             if row:
                 return dict(row)
+        return None
 
-    return None
+    try:
+        if existing_conn is not None:
+            return _query(existing_conn)
+        with get_connection() as connection:
+            return _query(connection)
+    except Exception:
+        return None
 
 
 def is_registered_user(user_id):
