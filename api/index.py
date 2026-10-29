@@ -8,8 +8,18 @@ BACKEND = ROOT / "backend"
 sys.path.insert(0, str(BACKEND))
 
 import database
+import shutil
+
 if not os.environ.get("DATABASE_URL"):
-    database.DATABASE_PATH = Path("/tmp/consentguard.db")
+    tmp_db = Path("/tmp/consentguard.db")
+    bundled_db = BACKEND / "consentguard.db"
+    if not tmp_db.exists() and bundled_db.exists():
+        try:
+            shutil.copyfile(bundled_db, tmp_db)
+        except Exception:
+            pass
+    database.DATABASE_PATH = tmp_db
+
 database.initialize_database()
 
 import api as consent_api

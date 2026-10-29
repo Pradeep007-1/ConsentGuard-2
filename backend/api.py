@@ -35,12 +35,36 @@ app.secret_key = os.environ.get(
 is_production = bool(os.environ.get("VERCEL") or os.environ.get("PRODUCTION"))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
-    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SAMESITE="None" if is_production else "Lax",
     SESSION_COOKIE_SECURE=is_production,
     PERMANENT_SESSION_LIFETIME=86400 * 7,  # 7 days persistent session
 )
 
 CORS(app, supports_credentials=True)
+
+
+@app.after_request
+def add_security_and_cors_headers(response):
+    origin = request.headers.get("Origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Test-Source"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    return response
+
+
+@app.route("/api/<path:subpath>", methods=["OPTIONS"])
+@app.route("/<path:subpath>", methods=["OPTIONS"])
+def handle_options(subpath):
+    response = Response("", status=204)
+    origin = request.headers.get("Origin")
+    if origin:
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Test-Source"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+    return response
 
 PURPOSES = {"Analytics", "Marketing", "Service Improvement", "Third-Party Sharing"}
 
@@ -72,12 +96,14 @@ MOCK_DATA = {
 # Authentication & User Isolation Helpers
 # ============================================================================
 def get_authenticated_user():
-    """Returns the verified user dict from the server-side session or Authorization header."""
-    user_id = session.get("user_id")
+    """Returns the verified user dict from the Authorization header or server-side session."""
+    user_id = None
+    auth_header = request.headers.get("Authorization", "").strip()
+    if auth_header.startswith("Bearer "):
+        user_id = auth_header[7:].strip()
+
     if not user_id:
-        auth_header = request.headers.get("Authorization", "")
-        if auth_header.startswith("Bearer "):
-            user_id = auth_header[7:].strip()
+        user_id = session.get("user_id")
 
     if not user_id:
         return None
@@ -287,6 +313,7 @@ def signup():
     return jsonify({
         "success": True,
         "message": "Account created successfully.",
+        "token": user_id,
         "user": {
             "id": user_id,
             "name": name,
@@ -344,6 +371,7 @@ def login():
     return jsonify({
         "success": True,
         "message": "Logged in successfully.",
+        "token": user["id"],
         "user": {
             "id": user["id"],
             "name": user["name"],
@@ -401,6 +429,7 @@ def demo_login():
     return jsonify({
         "success": True,
         "message": f"Logged into demo account {user['name']}.",
+        "token": user["id"],
         "user": {
             "id": user["id"],
             "name": user["name"],

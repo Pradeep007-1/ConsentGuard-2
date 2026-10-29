@@ -2242,8 +2242,9 @@ const PURPOSES = ['Analytics', 'Marketing', 'Service Improvement'];
 
 const state = {
   authenticated: false,
-  currentUser: 'demo-user',
+  currentUser: null,
   currentUserObj: null,
+  authToken: localStorage.getItem('cg_token') || null,
   consents: [],
   audit: [],
   notice: null,
@@ -2276,10 +2277,16 @@ function switchAuthTab(tab) {
   }
 }
 
-function setAuthenticatedUser(user) {
+function setAuthenticatedUser(user, token) {
   state.authenticated = true;
   state.currentUserObj = user;
   state.currentUser = user.id;
+  state.authToken = token || user.id;
+
+  try {
+    localStorage.setItem('cg_user', JSON.stringify(user));
+    localStorage.setItem('cg_token', state.authToken);
+  } catch(e) {}
 
   const authContainer = document.getElementById('auth-container');
   const appLayout = document.getElementById('app-layout');
@@ -2289,7 +2296,7 @@ function setAuthenticatedUser(user) {
   const userLabel = document.getElementById('user-dropdown-selected-label');
   if (userLabel) userLabel.textContent = user.name || user.id;
 
-  ['header-user-select', 'sim-user', 'sim-page-user'].forEach(id => {
+  ['header-user-select', 'sim-user', 'sim-page-user', 'audit-user-filter'].forEach(id => {
     const el = document.getElementById(id);
     if (el) {
       let opt = el.querySelector(`option[value="${user.id}"]`);
@@ -2312,8 +2319,14 @@ function setUnauthenticated() {
   state.authenticated = false;
   state.currentUser = null;
   state.currentUserObj = null;
+  state.authToken = null;
   state.consents = [];
   state.audit = [];
+
+  try {
+    localStorage.removeItem('cg_user');
+    localStorage.removeItem('cg_token');
+  } catch(e) {}
 
   const authContainer = document.getElementById('auth-container');
   const appLayout = document.getElementById('app-layout');
@@ -2328,10 +2341,19 @@ function setUnauthenticated() {
 
 async function checkAuthStatus() {
   try {
-    const res = await fetch(API + '/auth/me', { cache: 'no-store' });
+    const savedToken = localStorage.getItem('cg_token');
+    const headers = {};
+    if (savedToken) {
+      headers['Authorization'] = 'Bearer ' + savedToken;
+    }
+    const res = await fetch(API + '/auth/me', {
+      cache: 'no-store',
+      credentials: 'include',
+      headers
+    });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.authenticated && data.user) {
-      setAuthenticatedUser(data.user);
+      setAuthenticatedUser(data.user, savedToken || data.user.id);
       await refreshAll();
       return true;
     }
@@ -2354,6 +2376,7 @@ async function handleLoginSubmit(event) {
   try {
     const res = await fetch(API + '/auth/login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
@@ -2361,7 +2384,7 @@ async function handleLoginSubmit(event) {
 
     if (res.ok && data.success && data.user) {
       showToast('Welcome back, ' + (data.user.name || data.user.id) + '!');
-      setAuthenticatedUser(data.user);
+      setAuthenticatedUser(data.user, data.token || data.user.id);
       await refreshAll();
     } else {
       if (errBox) {
@@ -2405,6 +2428,7 @@ async function handleSignupSubmit(event) {
   try {
     const res = await fetch(API + '/auth/signup', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, email, password })
     });
@@ -2412,7 +2436,7 @@ async function handleSignupSubmit(event) {
 
     if (res.status === 201 && data.success && data.user) {
       showToast('Account created! Zero-trust consent ledger initialized.');
-      setAuthenticatedUser(data.user);
+      setAuthenticatedUser(data.user, data.token || data.user.id);
       await refreshAll();
     } else {
       if (errBox) {
@@ -2435,13 +2459,14 @@ async function quickDemoLogin(demoId) {
   try {
     const res = await fetch(API + '/auth/demo-login', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: demoId })
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.success && data.user) {
       showToast('Active demo subject: ' + data.user.name);
-      setAuthenticatedUser(data.user);
+      setAuthenticatedUser(data.user, data.token || data.user.id);
       await refreshAll();
     } else {
       showToast(data.error || 'Failed to switch demo account', true);
@@ -2453,7 +2478,13 @@ async function quickDemoLogin(demoId) {
 
 async function logoutUser() {
   try {
-    await fetch(API + '/auth/logout', { method: 'POST' });
+    const headers = {};
+    if (state.authToken) headers['Authorization'] = 'Bearer ' + state.authToken;
+    await fetch(API + '/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+      headers
+    });
   } catch(e) {}
   setUnauthenticated();
   showToast('You have signed out.');
@@ -2604,8 +2635,21 @@ window.addEventListener('load', () => {
 
 // JSON API Fetch Helper
 async function requestJson(path, options={}) {
-  const response = await fetch(API + path, options);
+  const headers = { ...(options.headers || {}) };
+  if (state.authToken && !headers['Authorization']) {
+    headers['Authorization'] = 'Bearer ' + state.authToken;
+  }
+  const opts = {
+    ...options,
+    credentials: 'include',
+    headers
+  };
+  const response = await fetch(API + path, opts);
   const data = await response.json().catch(() => ({}));
+  if (response.status === 401) {
+    setUnauthenticated();
+    throw new Error(data.error || 'Authentication required. Please sign in or register.');
+  }
   if (!response.ok && response.status !== 403 && response.status !== 400 && response.status !== 409) {
     throw new Error(data.error || data.message || ('Request failed (' + response.status + ')'));
   }
@@ -2613,15 +2657,17 @@ async function requestJson(path, options={}) {
 }
 
 function consentFor(purpose) {
-  return state.consents.find(c => c.user_id === state.currentUser && c.purpose === purpose);
+  const currentUid = state.currentUserObj ? state.currentUserObj.id : state.currentUser;
+  return state.consents.find(c => (c.user_id === currentUid || c.user_id === state.currentUser) && c.purpose === purpose);
 }
 
 // Render Purposes & Dashboard Summaries
 function renderPurposes() {
   const currentNoticeVer = state.notice?.notice_version || '1.0';
+  const displayUser = state.currentUserObj ? (state.currentUserObj.name || state.currentUserObj.id) : (state.currentUser || 'User');
 
   document.querySelectorAll('.active-user-label').forEach(el => {
-    el.textContent = state.currentUser;
+    el.textContent = displayUser;
   });
 
   let activeCount = 0;
@@ -3035,8 +3081,9 @@ async function refreshAll() {
   }
 
   try {
+    const uidParam = state.currentUser ? '?user_id=' + encodeURIComponent(state.currentUser) : '';
     const [consentsRes, auditRes, noticeRes, noticesRes, verifyRes] = await Promise.all([
-      requestJson('/consents?user_id=' + encodeURIComponent(state.currentUser)),
+      requestJson('/consents' + uidParam),
       requestJson('/audit?limit=200'),
       requestJson('/notice'),
       requestJson('/notices'),
@@ -3078,11 +3125,13 @@ async function setConsent(purpose, action) {
   if (state.inFlight) return;
   state.inFlight = true;
 
+  const currentUid = state.currentUserObj ? state.currentUserObj.id : state.currentUser;
+
   try {
     const { response, data } = await requestJson('/consents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user_id: state.currentUser, purpose, action, source: 'user' })
+      body: JSON.stringify({ user_id: currentUid, purpose, action, source: 'user' })
     });
 
     if (response.status === 201) {
@@ -3092,7 +3141,7 @@ async function setConsent(purpose, action) {
       showToast(data.error || 'Failed to save consent decision.', true);
     }
   } catch(err) {
-    showToast('Error communicating with backend: ' + err.message, true);
+    showToast(err.message || 'Error communicating with backend', true);
   } finally {
     state.inFlight = false;
   }
@@ -3100,7 +3149,8 @@ async function setConsent(purpose, action) {
 
 // Data Access Simulator
 async function simulateAccess() {
-  const user = document.getElementById('sim-user').value.trim() || state.currentUser;
+  const currentUid = state.currentUserObj ? state.currentUserObj.id : state.currentUser;
+  const user = document.getElementById('sim-user').value.trim() || currentUid;
   const purpose = document.getElementById('sim-purpose').value;
   const resultBox = document.getElementById('sim-result-box');
   const titleEl = document.getElementById('sim-decision-title');
@@ -3134,7 +3184,7 @@ async function simulateAccess() {
       titleEl.textContent = '✕ ACCESS BLOCKED (PEP HTTP ' + response.status + ')';
       payloadWrap.style.display = 'none';
 
-      let explanation = data.reason || 'Access denied.';
+      let explanation = data.reason || data.error || 'Access denied.';
       if (data.reason_code === 'NO_CONSENT') {
         explanation = 'No consent on record. Explicit opt-in required.';
       } else if (data.reason_code === 'WITHDRAWN') {
@@ -3143,6 +3193,8 @@ async function simulateAccess() {
         explanation = 'Consent was explicitly denied by user.';
       } else if (data.reason_code === 'NOTICE_MISMATCH') {
         explanation = 'Privacy Notice was updated. Fresh consent required under current notice.';
+      } else if (data.reason_code === 'FORBIDDEN_CROSS_USER_ACCESS') {
+        explanation = 'Cross-user boundary violation: You cannot access or modify records for another user.';
       }
       reasonEl.textContent = explanation;
     }
@@ -3226,9 +3278,33 @@ async function verifyAuditLedger() {
   }
 }
 
-function exportAuditData(format) {
-  window.open(API + '/audit/export?format=' + format, '_blank');
-  showToast(`Exporting audit ledger as ${format.toUpperCase()}…`);
+async function exportAuditData(format) {
+  try {
+    showToast(`Exporting audit ledger as ${format.toUpperCase()}…`);
+    const headers = {};
+    if (state.authToken) headers['Authorization'] = 'Bearer ' + state.authToken;
+    const res = await fetch(API + '/audit/export?format=' + format, {
+      credentials: 'include',
+      headers
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(err.error || 'Export failed.', true);
+      return;
+    }
+    const blob = await res.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `audit.${format}`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+    showToast(`Audit ledger exported as ${format.toUpperCase()}.`);
+  } catch(e) {
+    showToast('Export failed: ' + e.message, true);
+  }
 }
 
 // Diagnostic Test Suite (14 Automated Checks)
@@ -3244,9 +3320,14 @@ async function runLifecycleTests() {
 
   const post = async (path, payload) => {
     payload.source = 'test';
+    const headers = { 'Content-Type': 'application/json', 'X-Test-Source': 'test' };
+    if (state.authToken) {
+      headers['Authorization'] = 'Bearer ' + state.authToken;
+    }
     const response = await fetch(API + path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      headers,
       body: JSON.stringify(payload)
     });
     const data = await response.json().catch(() => ({}));
