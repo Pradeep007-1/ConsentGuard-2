@@ -3084,16 +3084,13 @@ async function refreshAnalyticsMetrics() {
 
 // Main Data Refresh
 async function refreshAll() {
-  const healthOk = await checkBackendHealth();
-  if (!healthOk) {
-    showToast('Cannot connect to Flask backend on port 5001.', true);
-    return;
-  }
+  // Check health asynchronously without blocking user interactions
+  checkBackendHealth().catch(() => {});
 
   try {
     const [consentsRes, auditRes, noticeRes, noticesRes, verifyRes] = await Promise.all([
       requestJson('/consents'),
-      requestJson('/audit?limit=200'),
+      requestJson('/audit?limit=100'),
       requestJson('/notice'),
       requestJson('/notices'),
       requestJson('/audit/verify')
@@ -3122,7 +3119,7 @@ async function refreshAll() {
       chainEl.className = 'summary-card-number ' + (isIntact ? 'green' : 'rose');
     }
   } catch (error) {
-    await checkBackendHealth();
+    checkBackendHealth().catch(() => {});
     showToast('Error syncing with backend: ' + error.message, true);
   }
 }
