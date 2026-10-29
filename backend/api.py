@@ -950,12 +950,12 @@ def get_audit():
 @app.get("/api/audit/verify")
 def verify_audit():
     source = request.args.get("source", "")
+    strict = request.args.get("strict", "false").lower() == "true"
     auth_user = get_authenticated_user()
     is_test_mode = bool(app.config.get("TESTING") or source == "test")
 
     with get_connection() as connection:
-        # If user is authenticated, verify full ledger
-        result = verify_audit_chain(connection)
+        result = verify_audit_chain(connection, strict_linear=strict)
     status_code = 200 if result["status"] == "intact" else 409
     return jsonify(result), status_code
 

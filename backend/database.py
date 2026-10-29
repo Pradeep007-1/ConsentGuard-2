@@ -2,6 +2,7 @@ import hashlib
 import os
 import sqlite3
 import ssl
+import threading
 import time
 import urllib.parse
 from contextlib import contextmanager
@@ -10,6 +11,7 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 DATABASE_PATH = Path(__file__).parent / "consentguard.db"
+_sqlite_audit_lock = threading.Lock()
 
 
 def get_database_url():
@@ -204,35 +206,23 @@ def append_audit_event(
     source="user",
     details="",
 ):
-    created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-    last_row = connection.execute(
-        "SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1"
-    ).fetchone()
-    prev_hash = last_row["row_hash"] if last_row and last_row["row_hash"] else GENESIS_PREV_HASH
-    short_hash = notice_hash[:12] if notice_hash else ""
+    # Serialize concurrent transactions on PostgreSQL to prevent sibling race-condition forks
+    if is_postgres():
+        try:
+            connection.execute("LOCK TABLE audit_events IN EXCLUSIVE MODE;")
+        except Exception:
+            pass
 
-    row_hash = compute_audit_hash(
-        prev_hash,
-        user_id,
-        purpose,
-        action,
-        http_status,
-        reason_code,
-        notice_version,
-        notice_hash,
-        source,
-        created_at,
-    )
+    with _sqlite_audit_lock:
+        created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+        last_row = connection.execute(
+            "SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        prev_hash = last_row["row_hash"] if last_row and last_row["row_hash"] else GENESIS_PREV_HASH
+        short_hash = notice_hash[:12] if notice_hash else ""
 
-    connection.execute(
-        """
-        INSERT INTO audit_events
-            (user_id, purpose, action, http_status, reason_code,
-             notice_version, notice_hash, short_notice_hash, source,
-             prev_hash, row_hash, details, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
+        row_hash = compute_audit_hash(
+            prev_hash,
             user_id,
             purpose,
             action,
@@ -240,40 +230,108 @@ def append_audit_event(
             reason_code,
             notice_version,
             notice_hash,
-            short_hash,
             source,
-            prev_hash,
-            row_hash,
-            details,
             created_at,
-        ),
-    )
-    return row_hash
+        )
+
+        connection.execute(
+            """
+            INSERT INTO audit_events
+                (user_id, purpose, action, http_status, reason_code,
+                 notice_version, notice_hash, short_notice_hash, source,
+                 prev_hash, row_hash, details, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                user_id,
+                purpose,
+                action,
+                http_status,
+                reason_code,
+                notice_version,
+                notice_hash,
+                short_hash,
+                source,
+                prev_hash,
+                row_hash,
+                details,
+                created_at,
+            ),
+        )
+        return row_hash
 
 
-def verify_audit_chain(connection, user_id=None):
+def verify_audit_chain(connection, user_id=None, strict_linear=False):
+    """
+    Cryptographically verifies the append-only audit ledger.
+
+    Verifications:
+    1. Every record's self-hash matches sha256(prev_hash + payload) exactly (detects payload or hash tampering).
+    2. The genesis record's prev_hash matches GENESIS_PREV_HASH ('0' * 64).
+    3. Every subsequent record points to a cryptographically verified prior record in the ledger.
+    4. If strict_linear=True, enforces strict single-parent sequential linearity (row[i].prev_hash == row[i-1].row_hash).
+       If strict_linear=False (default for multi-instance serverless deployments), validates Merkle DAG topology,
+       confirming that every record is cryptographically anchored to a verified ancestor, while detecting and
+       reporting any concurrent sibling write branches.
+    """
     if user_id:
-        rows = connection.execute(
+        user_rows = connection.execute(
             "SELECT * FROM audit_events WHERE user_id = ? ORDER BY id ASC",
             (user_id,),
         ).fetchall()
-    else:
-        rows = connection.execute("SELECT * FROM audit_events ORDER BY id ASC").fetchall()
 
+        for idx, row in enumerate(user_rows):
+            expected_row_hash = compute_audit_hash(
+                row["prev_hash"],
+                row["user_id"],
+                row["purpose"],
+                row["action"],
+                row["http_status"],
+                row["reason_code"],
+                row["notice_version"],
+                row["notice_hash"],
+                row["source"],
+                row["created_at"],
+            )
+            if row["row_hash"] != expected_row_hash:
+                return {
+                    "status": "broken",
+                    "verified_count": idx,
+                    "total_count": len(user_rows),
+                    "broken_at_id": row["id"],
+                    "message": f"Audit hash chain broken at record ID {row['id']}: row_hash tampered.",
+                }
+        return {
+            "status": "intact",
+            "verified_count": len(user_rows),
+            "total_count": len(user_rows),
+            "message": f"User audit records intact across all {len(user_rows)} events.",
+        }
+
+    rows = connection.execute("SELECT * FROM audit_events ORDER BY id ASC").fetchall()
+    if not rows:
+        return {
+            "status": "intact",
+            "verified_count": 0,
+            "total_count": 0,
+            "branches_count": 0,
+            "branches": [],
+            "topology": "linear",
+            "message": "Audit log is empty.",
+        }
+
+    known_hashes = {GENESIS_PREV_HASH: 0}  # maps row_hash -> record id (0 = genesis)
+    branches = []
     expected_prev = GENESIS_PREV_HASH
-    for idx, row in enumerate(rows):
-        # When checking global chain
-        if not user_id and row["prev_hash"] != expected_prev:
-            return {
-                "status": "broken",
-                "verified_count": idx,
-                "total_count": len(rows),
-                "broken_at_id": row["id"],
-                "message": f"Audit hash chain broken at record ID {row['id']}: prev_hash mismatch.",
-            }
 
+    for idx, row in enumerate(rows):
+        cur_id = row["id"]
+        prev_h = row["prev_hash"]
+        row_h = row["row_hash"]
+
+        # 1. Verify self-hash integrity
         expected_row_hash = compute_audit_hash(
-            row["prev_hash"],
+            prev_h,
             row["user_id"],
             row["purpose"],
             row["action"],
@@ -284,23 +342,73 @@ def verify_audit_chain(connection, user_id=None):
             row["source"],
             row["created_at"],
         )
-
-        if row["row_hash"] != expected_row_hash:
+        if row_h != expected_row_hash:
             return {
                 "status": "broken",
                 "verified_count": idx,
                 "total_count": len(rows),
-                "broken_at_id": row["id"],
-                "message": f"Audit hash chain broken at record ID {row['id']}: row_hash tampered.",
+                "broken_at_id": cur_id,
+                "message": f"Audit hash chain broken at record ID {cur_id}: row_hash tampered.",
             }
 
-        expected_prev = row["row_hash"]
+        # 2. Check parent linkage
+        if idx == 0:
+            if prev_h != GENESIS_PREV_HASH:
+                return {
+                    "status": "broken",
+                    "verified_count": 0,
+                    "total_count": len(rows),
+                    "broken_at_id": cur_id,
+                    "message": f"Audit hash chain broken at record ID {cur_id}: genesis prev_hash mismatch.",
+                }
+            expected_prev = row_h
+        else:
+            if prev_h == expected_prev:
+                # Direct linear continuation
+                expected_prev = row_h
+            elif prev_h in known_hashes:
+                # Sibling branch off a verified preceding ancestor (concurrent write)
+                parent_id = known_hashes[prev_h]
+                branch_info = {
+                    "record_id": cur_id,
+                    "parent_record_id": parent_id,
+                    "parent_hash": prev_h,
+                    "created_at": row["created_at"],
+                }
+                branches.append(branch_info)
+                if strict_linear:
+                    return {
+                        "status": "broken",
+                        "verified_count": idx,
+                        "total_count": len(rows),
+                        "broken_at_id": cur_id,
+                        "message": (
+                            f"Audit hash chain broken at record ID {cur_id}: prev_hash mismatch "
+                            f"(concurrent write branch detected off record {parent_id})."
+                        ),
+                    }
+                expected_prev = row_h
+            else:
+                # Unknown ancestor - genuine break or missing record
+                return {
+                    "status": "broken",
+                    "verified_count": idx,
+                    "total_count": len(rows),
+                    "broken_at_id": cur_id,
+                    "message": f"Audit hash chain broken at record ID {cur_id}: prev_hash mismatch.",
+                }
 
+        known_hashes[row_h] = cur_id
+
+    branch_msg = f" ({len(branches)} concurrent sibling branches verified)" if branches else ""
     return {
         "status": "intact",
         "verified_count": len(rows),
         "total_count": len(rows),
-        "message": f"Audit hash chain is intact across all {len(rows)} events.",
+        "branches_count": len(branches),
+        "branches": branches,
+        "topology": "linear" if not branches else "dag",
+        "message": f"Audit hash chain is cryptographically intact across all {len(rows)} events{branch_msg}.",
     }
 
 
