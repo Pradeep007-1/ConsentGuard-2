@@ -32,6 +32,7 @@ def app_client():
             api.NOTICE_TEXT = database.DEFAULT_NOTICE_TEXT
             api.NOTICE_HASH = database.DEFAULT_NOTICE_HASH
 
+            api.app.config["TESTING"] = True
             client = api.app.test_client()
             yield client
 

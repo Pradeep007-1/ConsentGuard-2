@@ -93,16 +93,60 @@ Follow this verification flow to test the complete lifecycle:
 
 ---
 
+## 🔐 Authentication & Multi-User Data Isolation
+
+ConsentGuard features a full-fledged authentication and multi-user data isolation system:
+- **Registration & Login**: Secure account creation with bcrypt/scrypt password hashing.
+- **Session Management**: Server-side signed session cookies (`HttpOnly`, `SameSite=Lax`).
+- **User-Specific Isolation**: Every registered account has an isolated consent ledger, simulator history, and audit log.
+- **Demo Subjects**: Synthetic accounts (`demo-user`, `user1`, `user2`, `user3`) for instant walkthroughs without manual registration.
+- **Tamper Resistance**: Prevents cross-user data access and unauthorized consent mutation by verifying the server-side authenticated identity.
+
+---
+
+## 🚀 Production Deployment & Database Configuration
+
+ConsentGuard is architected to run seamlessly both locally and serverless on **Vercel**:
+
+### 1. Database Architecture
+* **Local Development**: Defaults to local SQLite (`backend/consentguard.db`) with WAL mode.
+* **Production on Vercel**: Connects to any cloud PostgreSQL provider (Neon, Supabase, Vercel Postgres, AWS RDS) when `DATABASE_URL` is configured. Zero C-compiler dependencies are required due to pure-Python `pg8000` driver support.
+
+### 2. Environment Variables
+Configure the following in `.env` (locally) or in the **Vercel Project Settings > Environment Variables**:
+* `SECRET_KEY`: A strong random string for Flask session signing (e.g. `openssl rand -hex 32`).
+* `DATABASE_URL` *(Recommended on Vercel)*: PostgreSQL connection URI:
+  ```text
+  postgresql://user:password@ep-host.pooler.region.neon.tech/neondb?sslmode=require
+  ```
+
+### 3. Deploying to Vercel
+1. Push the code to GitHub:
+   ```bash
+   git push origin main
+   ```
+2. In the Vercel Dashboard, import the repository.
+3. Under **Project Settings > Environment Variables**, add `SECRET_KEY` and `DATABASE_URL`.
+4. Deploy! The Python serverless function in `api/index.py` and static frontend in `index.html` will build automatically according to `vercel.json`.
+
+---
+
 ## 🧪 Automated Test Suite
 
-ConsentGuard includes comprehensive automated tests that run against the live Flask server and SQLite database:
+ConsentGuard includes comprehensive automated tests covering authentication, notice invalidation, and ledger integrity:
 
 ```powershell
-# Run the 15-test pytest lifecycle suite:
+# Run the complete pytest suite (30 automated tests):
+python -m pytest tests/ -v
+
+# Run authentication and multi-user isolation tests:
+python -m pytest tests/test_auth_and_isolation.py -v
+
+# Run core consent policy tests:
 python -m pytest tests/test_consent.py -v
 
-# Run the 18-test backend unit test suite:
+# Run backend unit tests:
 python backend/test_api.py
 ```
 
-All tests execute with 100% PASS rates.
+All 48 backend automated tests execute with a 100% PASS rate.

@@ -1,10 +1,15 @@
 import hashlib
+import os
 import sqlite3
+import ssl
+import urllib.parse
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
+from werkzeug.security import generate_password_hash
 
 DATABASE_PATH = Path(__file__).parent / "consentguard.db"
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 GENESIS_PREV_HASH = "0" * 64
 
@@ -17,22 +22,115 @@ DEFAULT_NOTICE_TEXT = (
 DEFAULT_NOTICE_HASH = hashlib.sha256(DEFAULT_NOTICE_TEXT.encode("utf-8")).hexdigest()
 
 
+def is_postgres():
+    url = os.environ.get("DATABASE_URL", DATABASE_URL).strip()
+    return url.startswith("postgres://") or url.startswith("postgresql://")
+
+
+class PostgresCursorWrapper:
+    """Wraps pg8000 cursor to provide dict-like rows and translate '?' to '%s'."""
+
+    def __init__(self, cursor):
+        self._cursor = cursor
+
+    def execute(self, query, params=None):
+        if params is None:
+            params = ()
+        # Convert ? to %s for PostgreSQL
+        converted_query = query.replace("?", "%s")
+        self._cursor.execute(converted_query, params)
+        return self
+
+    def fetchone(self):
+        row = self._cursor.fetchone()
+        if row is None:
+            return None
+        cols = [col[0] for col in self._cursor.description]
+        return dict(zip(cols, row))
+
+    def fetchall(self):
+        rows = self._cursor.fetchall()
+        if not rows:
+            return []
+        cols = [col[0] for col in self._cursor.description]
+        return [dict(zip(cols, row)) for row in rows]
+
+    def __getattr__(self, name):
+        return getattr(self._cursor, name)
+
+
+class PostgresConnectionWrapper:
+    """Wraps pg8000 connection for context management."""
+
+    def __init__(self, raw_conn):
+        self._conn = raw_conn
+
+    def execute(self, query, params=None):
+        cursor = self._conn.cursor()
+        wrapper = PostgresCursorWrapper(cursor)
+        return wrapper.execute(query, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def rollback(self):
+        self._conn.rollback()
+
+    def close(self):
+        self._conn.close()
+
+
 @contextmanager
 def get_connection():
-    connection = sqlite3.connect(DATABASE_PATH, timeout=10.0)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA journal_mode = WAL;")
-    connection.execute("PRAGMA synchronous = NORMAL;")
-    connection.execute("PRAGMA busy_timeout = 5000;")
+    target_url = os.environ.get("DATABASE_URL", DATABASE_URL).strip()
+    if target_url.startswith("postgres://") or target_url.startswith("postgresql://"):
+        import pg8000.dbapi
 
-    try:
-        yield connection
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        raise
-    finally:
-        connection.close()
+        parsed = urllib.parse.urlparse(target_url)
+        user = urllib.parse.unquote(parsed.username or "")
+        password = urllib.parse.unquote(parsed.password or "")
+        host = parsed.hostname or "localhost"
+        port = parsed.port or 5432
+        database_name = (parsed.path or "/").lstrip("/")
+
+        ssl_ctx = None
+        if "sslmode=require" in target_url.lower() or parsed.hostname not in ("localhost", "127.0.0.1"):
+            ssl_ctx = ssl.create_default_context()
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+
+        raw_conn = pg8000.dbapi.connect(
+            user=user,
+            password=password,
+            host=host,
+            port=port,
+            database=database_name,
+            ssl_context=ssl_ctx,
+            timeout=10,
+        )
+        wrapper = PostgresConnectionWrapper(raw_conn)
+        try:
+            yield wrapper
+            wrapper.commit()
+        except Exception:
+            wrapper.rollback()
+            raise
+        finally:
+            wrapper.close()
+    else:
+        connection = sqlite3.connect(DATABASE_PATH, timeout=10.0)
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode = WAL;")
+        connection.execute("PRAGMA synchronous = NORMAL;")
+        connection.execute("PRAGMA busy_timeout = 5000;")
+        try:
+            yield connection
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
 
 def compute_audit_hash(
@@ -113,11 +211,19 @@ def append_audit_event(
     return row_hash
 
 
-def verify_audit_chain(connection):
-    rows = connection.execute("SELECT * FROM audit_events ORDER BY id ASC").fetchall()
+def verify_audit_chain(connection, user_id=None):
+    if user_id:
+        rows = connection.execute(
+            "SELECT * FROM audit_events WHERE user_id = ? ORDER BY id ASC",
+            (user_id,),
+        ).fetchall()
+    else:
+        rows = connection.execute("SELECT * FROM audit_events ORDER BY id ASC").fetchall()
+
     expected_prev = GENESIS_PREV_HASH
     for idx, row in enumerate(rows):
-        if row["prev_hash"] != expected_prev:
+        # When checking global chain
+        if not user_id and row["prev_hash"] != expected_prev:
             return {
                 "status": "broken",
                 "verified_count": idx,
@@ -168,44 +274,81 @@ def get_active_notice_from_db():
         return DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH
 
 
-def initialize_database():
-    with get_connection() as connection:
+def seed_demo_users(connection):
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    demo_password_hash = generate_password_hash("demo123")
+    demo_accounts = [
+        ("demo-user", "Demo User", "demo@consentguard.local", demo_password_hash, 1),
+        ("user1", "User 1 (Demo)", "user1@consentguard.local", demo_password_hash, 1),
+        ("user2", "User 2 (Demo)", "user2@consentguard.local", demo_password_hash, 1),
+        ("user3", "User 3 (Demo)", "user3@consentguard.local", demo_password_hash, 1),
+    ]
+    for uid, name, email, pw_hash, is_demo in demo_accounts:
         connection.execute(
             """
+            INSERT INTO users (id, name, email, password_hash, is_demo, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (uid, name, email, pw_hash, is_demo, now_str),
+        )
+
+
+def initialize_database():
+    with get_connection() as connection:
+        pg = is_postgres()
+        id_primary = "id SERIAL PRIMARY KEY" if pg else "id INTEGER PRIMARY KEY AUTOINCREMENT"
+
+        # 1. Users Table
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                is_demo INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        # 2. Consents Table
+        connection.execute(
+            f"""
             CREATE TABLE IF NOT EXISTS consents (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                {id_primary},
                 user_id TEXT NOT NULL,
                 purpose TEXT NOT NULL,
                 granted INTEGER NOT NULL CHECK (granted IN (0, 1)),
                 notice_version TEXT NOT NULL,
                 notice_hash TEXT NOT NULL DEFAULT '',
                 last_action TEXT NOT NULL DEFAULT 'grant',
-                updated_at TEXT NOT NULL DEFAULT (
-                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                ),
+                updated_at TEXT NOT NULL,
                 UNIQUE (user_id, purpose)
             )
             """
         )
 
-        # Check if last_action and notice_hash columns exist in consents
-        consent_cols = [
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(consents)").fetchall()
-        ]
-        if "last_action" not in consent_cols:
-            connection.execute(
-                "ALTER TABLE consents ADD COLUMN last_action TEXT NOT NULL DEFAULT 'grant'"
-            )
-        if "notice_hash" not in consent_cols:
-            connection.execute(
-                "ALTER TABLE consents ADD COLUMN notice_hash TEXT NOT NULL DEFAULT ''"
-            )
+        if not pg:
+            consent_cols = [
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(consents)").fetchall()
+            ]
+            if "last_action" not in consent_cols:
+                connection.execute(
+                    "ALTER TABLE consents ADD COLUMN last_action TEXT NOT NULL DEFAULT 'grant'"
+                )
+            if "notice_hash" not in consent_cols:
+                connection.execute(
+                    "ALTER TABLE consents ADD COLUMN notice_hash TEXT NOT NULL DEFAULT ''"
+                )
 
+        # 3. Audit Events Table
         connection.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS audit_events (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                {id_primary},
                 user_id TEXT NOT NULL,
                 purpose TEXT NOT NULL,
                 action TEXT NOT NULL,
@@ -218,65 +361,50 @@ def initialize_database():
                 prev_hash TEXT NOT NULL,
                 row_hash TEXT NOT NULL,
                 details TEXT,
-                created_at TEXT NOT NULL DEFAULT (
-                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                )
+                created_at TEXT NOT NULL
             )
             """
         )
 
-        # Ensure all columns exist on audit_events
-        audit_cols = [
-            row["name"]
-            for row in connection.execute("PRAGMA table_info(audit_events)").fetchall()
-        ]
-        required_audit_cols = {
-            "http_status": "INTEGER",
-            "reason_code": "TEXT",
-            "notice_hash": "TEXT NOT NULL DEFAULT ''",
-            "short_notice_hash": "TEXT NOT NULL DEFAULT ''",
-            "source": "TEXT NOT NULL DEFAULT 'user'",
-            "prev_hash": f"TEXT NOT NULL DEFAULT '{GENESIS_PREV_HASH}'",
-            "row_hash": "TEXT NOT NULL DEFAULT ''",
-        }
-        for col, col_type in required_audit_cols.items():
-            if col not in audit_cols:
-                connection.execute(
-                    f"ALTER TABLE audit_events ADD COLUMN {col} {col_type}"
-                )
-
+        # 4. Notice Versions Table
         connection.execute(
-            """
+            f"""
             CREATE TABLE IF NOT EXISTS notice_versions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                {id_primary},
                 version TEXT UNIQUE NOT NULL,
                 text TEXT NOT NULL,
                 hash TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (
-                    strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                )
+                created_at TEXT NOT NULL
             )
             """
         )
 
         # Seed initial notice version if not present
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         connection.execute(
             """
-            INSERT OR IGNORE INTO notice_versions (version, text, hash, created_at)
-            VALUES (?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            INSERT INTO notice_versions (version, text, hash, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT (version) DO NOTHING
             """,
-            (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH),
+            (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH, now_str),
         )
 
-        # Useful indexes for high-throughput reads
+        # Seed initial demo accounts
+        seed_demo_users(connection)
+
+        # Useful indexes
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_audit_user_action ON audit_events(user_id, action)"
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_consents_user ON consents(user_id)"
         )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"
+        )
 
 
 if __name__ == "__main__":
     initialize_database()
-    print(f"Database initialized with WAL mode: {DATABASE_PATH}")
+    print(f"Database initialized: {DATABASE_PATH}")

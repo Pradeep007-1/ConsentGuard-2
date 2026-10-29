@@ -1244,13 +1244,231 @@ table.feed-table tr:hover td {
     grid-template-columns: 1fr;
   }
 }
+
+/* Authentication Screen Styling */
+.auth-container {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--bg-main, #f8fafc);
+}
+.auth-card {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 12px;
+  box-shadow: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+  padding: 32px;
+  color: var(--text-main, #0f172a);
+}
+.auth-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.auth-logo-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--primary, #2563eb);
+  color: #ffffff;
+  margin-bottom: 12px;
+}
+.auth-header h1 {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main, #0f172a);
+  letter-spacing: -0.3px;
+  margin: 0 0 4px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.auth-header p {
+  font-size: 13px;
+  color: var(--text-muted, #64748b);
+  margin: 0;
+}
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  background: var(--bg-surface, #f1f5f9);
+  padding: 4px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-color, #e2e8f0);
+}
+.auth-tab-btn {
+  padding: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #64748b);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.auth-tab-btn.active {
+  background: var(--bg-card, #ffffff);
+  color: var(--text-main, #0f172a);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+.auth-form-group {
+  margin-bottom: 14px;
+}
+.auth-form-group label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-main, #0f172a);
+  margin-bottom: 5px;
+}
+.auth-form-group input {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 13px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  border-radius: 6px;
+  background: var(--bg-card, #ffffff);
+  color: var(--text-main, #0f172a);
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.auth-form-group input:focus {
+  border-color: var(--primary, #2563eb);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+.auth-error-box {
+  display: none;
+  padding: 10px 12px;
+  background: var(--rose-bg, #fff1f2);
+  border: 1px solid var(--rose-border, #fecdd3);
+  color: var(--rose-text, #be123c);
+  border-radius: 6px;
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+.auth-demo-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 20px 0 14px 0;
+  color: var(--text-muted, #64748b);
+  font-size: 11.5px;
+}
+.auth-demo-divider::before,
+.auth-demo-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+.auth-demo-divider span {
+  padding: 0 10px;
+}
+.auth-demo-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 </style>
 </head>
 <body>
 
+<!-- ==================== AUTHENTICATION SCREEN ==================== -->
+<div class="auth-container" id="auth-container" style="display:none;">
+  <div class="auth-card">
+    <div class="auth-header">
+      <div class="auth-logo-badge">
+        <svg style="width:24px; height:24px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"/></svg>
+      </div>
+      <h1>ConsentGuard <span class="pep-badge">PEP ACTIVE</span></h1>
+      <p>Purpose-Based Data Access Control &amp; Consent Ledger</p>
+    </div>
+
+    <!-- Tabs: Sign In / Create Account -->
+    <div class="auth-tabs" role="tablist">
+      <button type="button" class="auth-tab-btn active" id="tab-btn-login" onclick="switchAuthTab('login')">Sign In</button>
+      <button type="button" class="auth-tab-btn" id="tab-btn-signup" onclick="switchAuthTab('signup')">Create Account</button>
+    </div>
+
+    <!-- 1. Sign In Form -->
+    <form id="form-login" onsubmit="handleLoginSubmit(event)">
+      <div class="auth-error-box" id="login-error-box"></div>
+
+      <div class="auth-form-group">
+        <label for="login-email">Email Address</label>
+        <input type="email" id="login-email" placeholder="name@company.com" required autocomplete="email" />
+      </div>
+
+      <div class="auth-form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="login-submit-btn" style="padding:10px; font-weight:600; width:100%;">
+        Sign In to Privacy Control Center →
+      </button>
+
+      <div class="auth-demo-divider">
+        <span>Or explore with an isolated demo account</span>
+      </div>
+
+      <div class="auth-demo-grid">
+        <button type="button" class="btn btn-outline btn-sm btn-block" onclick="quickDemoLogin('demo-user')">
+          demo-user
+        </button>
+        <button type="button" class="btn btn-outline btn-sm btn-block" onclick="quickDemoLogin('user1')">
+          user1 (demo)
+        </button>
+      </div>
+    </form>
+
+    <!-- 2. Create Account Form -->
+    <form id="form-signup" style="display:none;" onsubmit="handleSignupSubmit(event)">
+      <div class="auth-error-box" id="signup-error-box"></div>
+
+      <div class="auth-form-group">
+        <label for="signup-name">Full Name</label>
+        <input type="text" id="signup-name" placeholder="e.g. Jane Doe" required autocomplete="name" />
+      </div>
+
+      <div class="auth-form-group">
+        <label for="signup-email">Email Address</label>
+        <input type="email" id="signup-email" placeholder="jane@example.com" required autocomplete="email" />
+      </div>
+
+      <div class="auth-form-group">
+        <label for="signup-password">Password (min 6 characters)</label>
+        <input type="password" id="signup-password" placeholder="••••••••" minlength="6" required autocomplete="new-password" />
+      </div>
+
+      <div class="auth-form-group">
+        <label for="signup-confirm-password">Confirm Password</label>
+        <input type="password" id="signup-confirm-password" placeholder="••••••••" minlength="6" required autocomplete="new-password" />
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-block" id="signup-submit-btn" style="padding:10px; font-weight:600; width:100%;">
+        Create Account &amp; Opt-In Control →
+      </button>
+
+      <p style="font-size:11.5px; color:var(--text-muted); text-align:center; margin-top:12px; margin-bottom:0;">
+        Your account is provisioned with zero prior consents and an isolated audit trail.
+      </p>
+    </form>
+  </div>
+</div>
+
 <div class="sidebar-backdrop" id="sidebar-backdrop" onclick="toggleMobileSidebar()"></div>
 
-<div class="app-layout">
+<div class="app-layout" id="app-layout">
   <!-- ==================== SIDEBAR ==================== -->
   <aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
@@ -1371,6 +1589,12 @@ table.feed-table tr:hover td {
 
         <!-- Active Notice Version -->
         <span class="notice-pill" id="header-notice-pill" title="Active Privacy Notice Version">v1.0</span>
+
+        <!-- Sign Out Button -->
+        <button class="btn btn-outline btn-sm" id="header-logout-btn" onclick="logoutUser()" title="Sign out of current account" style="display:inline-flex; align-items:center; gap:5px; font-size:12px; padding:4px 9px;">
+          <svg style="width:13px; height:13px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>
+          <span>Sign Out</span>
+        </button>
 
         <!-- Theme Toggle -->
         <button class="theme-btn" id="theme-toggle-btn" title="Toggle Theme" aria-label="Toggle Light/Dark Theme">
@@ -2017,7 +2241,9 @@ const API = '/api';
 const PURPOSES = ['Analytics', 'Marketing', 'Service Improvement'];
 
 const state = {
+  authenticated: false,
   currentUser: 'demo-user',
+  currentUserObj: null,
   consents: [],
   audit: [],
   notice: null,
@@ -2025,6 +2251,213 @@ const state = {
   inFlight: false,
   theme: localStorage.getItem('cg-theme') || 'light'
 };
+
+// ==================== AUTHENTICATION LOGIC ====================
+function switchAuthTab(tab) {
+  const btnLogin = document.getElementById('tab-btn-login');
+  const btnSignup = document.getElementById('tab-btn-signup');
+  const formLogin = document.getElementById('form-login');
+  const formSignup = document.getElementById('form-signup');
+  const loginErr = document.getElementById('login-error-box');
+  const signupErr = document.getElementById('signup-error-box');
+  if (loginErr) loginErr.style.display = 'none';
+  if (signupErr) signupErr.style.display = 'none';
+
+  if (tab === 'login') {
+    btnLogin.classList.add('active');
+    btnSignup.classList.remove('active');
+    formLogin.style.display = 'block';
+    formSignup.style.display = 'none';
+  } else {
+    btnLogin.classList.remove('active');
+    btnSignup.classList.add('active');
+    formLogin.style.display = 'none';
+    formSignup.style.display = 'block';
+  }
+}
+
+function setAuthenticatedUser(user) {
+  state.authenticated = true;
+  state.currentUserObj = user;
+  state.currentUser = user.id;
+
+  const authContainer = document.getElementById('auth-container');
+  const appLayout = document.getElementById('app-layout');
+  if (authContainer) authContainer.style.display = 'none';
+  if (appLayout) appLayout.style.display = 'flex';
+
+  const userLabel = document.getElementById('user-dropdown-selected-label');
+  if (userLabel) userLabel.textContent = user.name || user.id;
+
+  ['header-user-select', 'sim-user', 'sim-page-user'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      let opt = el.querySelector(`option[value="${user.id}"]`);
+      if (!opt) {
+        opt = document.createElement('option');
+        opt.value = user.id;
+        opt.textContent = `${user.name || user.id} (Active)`;
+        el.insertBefore(opt, el.firstChild);
+      }
+      el.value = user.id;
+    }
+  });
+
+  document.querySelectorAll('.active-user-label').forEach(el => {
+    el.textContent = `${user.name || user.id}`;
+  });
+}
+
+function setUnauthenticated() {
+  state.authenticated = false;
+  state.currentUser = null;
+  state.currentUserObj = null;
+  state.consents = [];
+  state.audit = [];
+
+  const authContainer = document.getElementById('auth-container');
+  const appLayout = document.getElementById('app-layout');
+  if (authContainer) authContainer.style.display = 'flex';
+  if (appLayout) appLayout.style.display = 'none';
+
+  const lEmail = document.getElementById('login-email');
+  const lPass = document.getElementById('login-password');
+  if (lEmail) lEmail.value = '';
+  if (lPass) lPass.value = '';
+}
+
+async function checkAuthStatus() {
+  try {
+    const res = await fetch(API + '/auth/me', { cache: 'no-store' });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.authenticated && data.user) {
+      setAuthenticatedUser(data.user);
+      await refreshAll();
+      return true;
+    }
+  } catch(e) {}
+  setUnauthenticated();
+  return false;
+}
+
+async function handleLoginSubmit(event) {
+  event.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const errBox = document.getElementById('login-error-box');
+  const btn = document.getElementById('login-submit-btn');
+
+  if (errBox) errBox.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = 'Authenticating…';
+
+  try {
+    const res = await fetch(API + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok && data.success && data.user) {
+      showToast('Welcome back, ' + (data.user.name || data.user.id) + '!');
+      setAuthenticatedUser(data.user);
+      await refreshAll();
+    } else {
+      if (errBox) {
+        errBox.textContent = data.error || 'Invalid email or password.';
+        errBox.style.display = 'block';
+      }
+    }
+  } catch(e) {
+    if (errBox) {
+      errBox.textContent = 'Connection error: ' + e.message;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In to Privacy Control Center →';
+  }
+}
+
+async function handleSignupSubmit(event) {
+  event.preventDefault();
+  const name = document.getElementById('signup-name').value.trim();
+  const email = document.getElementById('signup-email').value.trim();
+  const password = document.getElementById('signup-password').value;
+  const confirm = document.getElementById('signup-confirm-password').value;
+  const errBox = document.getElementById('signup-error-box');
+  const btn = document.getElementById('signup-submit-btn');
+
+  if (errBox) errBox.style.display = 'none';
+
+  if (password !== confirm) {
+    if (errBox) {
+      errBox.textContent = 'Passwords do not match.';
+      errBox.style.display = 'block';
+    }
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Provisioning Account…';
+
+  try {
+    const res = await fetch(API + '/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (res.status === 201 && data.success && data.user) {
+      showToast('Account created! Zero-trust consent ledger initialized.');
+      setAuthenticatedUser(data.user);
+      await refreshAll();
+    } else {
+      if (errBox) {
+        errBox.textContent = data.error || 'Registration failed.';
+        errBox.style.display = 'block';
+      }
+    }
+  } catch(e) {
+    if (errBox) {
+      errBox.textContent = 'Connection error: ' + e.message;
+      errBox.style.display = 'block';
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create Account & Opt-In Control →';
+  }
+}
+
+async function quickDemoLogin(demoId) {
+  try {
+    const res = await fetch(API + '/auth/demo-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: demoId })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.success && data.user) {
+      showToast('Active demo subject: ' + data.user.name);
+      setAuthenticatedUser(data.user);
+      await refreshAll();
+    } else {
+      showToast(data.error || 'Failed to switch demo account', true);
+    }
+  } catch(e) {
+    showToast('Demo login error: ' + e.message, true);
+  }
+}
+
+async function logoutUser() {
+  try {
+    await fetch(API + '/auth/logout', { method: 'POST' });
+  } catch(e) {}
+  setUnauthenticated();
+  showToast('You have signed out.');
+}
 
 function escapeHtml(val) {
   return String(val ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -2098,32 +2531,36 @@ document.addEventListener('click', (e) => {
   }
 });
 
-function onUserChange(newUser) {
-  state.currentUser = newUser;
-  const label = document.getElementById('user-dropdown-selected-label');
-  if (label) label.textContent = newUser;
-  const headerSelect = document.getElementById('header-user-select');
-  if (headerSelect) headerSelect.value = newUser;
-  const simUser = document.getElementById('sim-user');
-  if (simUser) simUser.value = newUser;
-  const pageUser = document.getElementById('sim-page-user');
-  if (pageUser) pageUser.value = newUser;
+async function onUserChange(newUser) {
+  if (['demo-user', 'user1', 'user2', 'user3'].includes(newUser)) {
+    await quickDemoLogin(newUser);
+  } else {
+    state.currentUser = newUser;
+    const label = document.getElementById('user-dropdown-selected-label');
+    if (label) label.textContent = newUser;
+    const headerSelect = document.getElementById('header-user-select');
+    if (headerSelect) headerSelect.value = newUser;
+    const simUser = document.getElementById('sim-user');
+    if (simUser) simUser.value = newUser;
+    const pageUser = document.getElementById('sim-page-user');
+    if (pageUser) pageUser.value = newUser;
 
-  document.querySelectorAll('.active-user-label').forEach(el => {
-    el.textContent = newUser;
-  });
+    document.querySelectorAll('.active-user-label').forEach(el => {
+      el.textContent = newUser;
+    });
 
-  document.querySelectorAll('#user-dropdown-menu .custom-dropdown-item').forEach(item => {
-    item.classList.toggle('active', item.dataset.value === newUser);
-  });
+    document.querySelectorAll('#user-dropdown-menu .custom-dropdown-item').forEach(item => {
+      item.classList.toggle('active', item.dataset.value === newUser);
+    });
 
-  const dropdown = document.getElementById('user-custom-dropdown');
-  if (dropdown) dropdown.classList.remove('open');
-  const btn = document.getElementById('user-dropdown-btn');
-  if (btn) btn.setAttribute('aria-expanded', 'false');
+    const dropdown = document.getElementById('user-custom-dropdown');
+    if (dropdown) dropdown.classList.remove('open');
+    const btn = document.getElementById('user-dropdown-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
 
-  showToast('Switched active user to: ' + newUser);
-  refreshAll();
+    showToast('Switched active user to: ' + newUser);
+    await refreshAll();
+  }
 }
 
 
@@ -2930,8 +3367,8 @@ function openGuidedDemo() {
   showToast('Welcome to the live Data Access Simulator. Test any user and purpose.');
 }
 
-// Initial Boot
-refreshAll();
+// Initial Boot: Check Authentication Status & Restore User Session
+checkAuthStatus();
 setInterval(checkBackendHealth, 15000);
 </script>
 </body>

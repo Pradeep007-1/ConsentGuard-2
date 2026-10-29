@@ -27,6 +27,7 @@ class ConsentGuardTests(unittest.TestCase):
 
         database.initialize_database()
 
+        api.app.config["TESTING"] = True
         self.client = api.app.test_client()
 
     def tearDown(self):
