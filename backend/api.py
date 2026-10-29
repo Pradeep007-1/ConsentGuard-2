@@ -75,7 +75,12 @@ NOTICE_HASH = DEFAULT_NOTICE_HASH
 
 def load_active_notice():
     global NOTICE_VERSION, NOTICE_TEXT, NOTICE_HASH
-    NOTICE_VERSION, NOTICE_TEXT, NOTICE_HASH = get_active_notice_from_db()
+    try:
+        ver, text, h = get_active_notice_from_db()
+        NOTICE_VERSION, NOTICE_TEXT, NOTICE_HASH = ver, text, h
+    except Exception:
+        pass
+    return NOTICE_VERSION, NOTICE_TEXT, NOTICE_HASH
 
 
 MOCK_DATA = {
@@ -232,13 +237,24 @@ def illustration():
 @app.get("/api/health")
 def health():
     try:
+        from database import is_postgres
         with get_connection() as connection:
             connection.execute("SELECT 1").fetchone()
-        return jsonify({
+        db_type = "postgresql" if is_postgres() else "sqlite"
+        is_persistent = is_postgres() or not is_production
+        resp_data = {
             "status": "ok",
             "service": "ConsentGuard API",
             "database": "connected",
-        })
+            "database_type": db_type,
+            "is_persistent": is_persistent,
+        }
+        if not is_persistent and is_production:
+            resp_data["storage_warning"] = (
+                "Running on ephemeral SQLite (/tmp) in production. Data will not persist across serverless instances. "
+                "Configure DATABASE_URL with a persistent PostgreSQL instance (e.g. Neon.tech)."
+            )
+        return jsonify(resp_data), 200
     except Exception as e:
         return jsonify({
             "status": "error",

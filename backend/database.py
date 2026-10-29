@@ -9,7 +9,17 @@ from pathlib import Path
 from werkzeug.security import generate_password_hash
 
 DATABASE_PATH = Path(__file__).parent / "consentguard.db"
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
+
+
+def get_database_url():
+    """Returns database URL from environment variables, supporting Neon, Vercel Postgres, Supabase."""
+    return (
+        os.environ.get("DATABASE_URL")
+        or os.environ.get("POSTGRES_URL")
+        or os.environ.get("POSTGRES_PRISMA_URL")
+        or ""
+    ).strip()
+
 
 GENESIS_PREV_HASH = "0" * 64
 
@@ -23,7 +33,7 @@ DEFAULT_NOTICE_HASH = hashlib.sha256(DEFAULT_NOTICE_TEXT.encode("utf-8")).hexdig
 
 
 def is_postgres():
-    url = os.environ.get("DATABASE_URL", DATABASE_URL).strip()
+    url = get_database_url()
     return url.startswith("postgres://") or url.startswith("postgresql://")
 
 
@@ -42,6 +52,8 @@ class PostgresCursorWrapper:
         return self
 
     def fetchone(self):
+        if not self._cursor.description:
+            return None
         row = self._cursor.fetchone()
         if row is None:
             return None
@@ -49,6 +61,8 @@ class PostgresCursorWrapper:
         return dict(zip(cols, row))
 
     def fetchall(self):
+        if not self._cursor.description:
+            return []
         rows = self._cursor.fetchall()
         if not rows:
             return []
@@ -82,7 +96,7 @@ class PostgresConnectionWrapper:
 
 @contextmanager
 def get_connection():
-    target_url = os.environ.get("DATABASE_URL", DATABASE_URL).strip()
+    target_url = get_database_url()
     if target_url.startswith("postgres://") or target_url.startswith("postgresql://"):
         import pg8000.dbapi
 
@@ -91,7 +105,7 @@ def get_connection():
         password = urllib.parse.unquote(parsed.password or "")
         host = parsed.hostname or "localhost"
         port = parsed.port or 5432
-        database_name = (parsed.path or "/").lstrip("/")
+        database_name = (parsed.path or "/").lstrip("/") or "postgres"
 
         ssl_ctx = None
         if "sslmode=require" in target_url.lower() or parsed.hostname not in ("localhost", "127.0.0.1"):

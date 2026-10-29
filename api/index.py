@@ -10,7 +10,7 @@ sys.path.insert(0, str(BACKEND))
 import database
 import shutil
 
-if not os.environ.get("DATABASE_URL"):
+if not database.is_postgres():
     tmp_db = Path("/tmp/consentguard.db")
     bundled_db = BACKEND / "consentguard.db"
     if not tmp_db.exists() and bundled_db.exists():

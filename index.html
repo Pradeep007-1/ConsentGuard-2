@@ -2237,7 +2237,9 @@ table.feed-table tr:hover td {
 
 <!-- ==================== CORE JAVASCRIPT ==================== -->
 <script>
-const API = '/api';
+const API = (window.location.protocol === 'file:' || (window.location.hostname === 'localhost' && window.location.port && window.location.port !== '5001') || (window.location.hostname === '127.0.0.1' && window.location.port && window.location.port !== '5001'))
+  ? 'http://127.0.0.1:5001/api'
+  : '/api';
 const PURPOSES = ['Analytics', 'Marketing', 'Service Improvement'];
 
 const state = {
@@ -2944,7 +2946,7 @@ async function checkBackendHealth() {
         bPill.style.background = 'var(--emerald-bg)';
         bPill.style.color = 'var(--emerald-text)';
       }
-      if (bText) bText.textContent = 'Backend: Online';
+      if (bText) bText.textContent = data.database_type === 'postgresql' ? 'Backend: Online (Postgres)' : 'Backend: Online';
       return true;
     } else {
       if (bPill) {
