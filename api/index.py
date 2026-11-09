@@ -20,8 +20,16 @@ if not database.is_postgres():
             pass
     database.DATABASE_PATH = tmp_db
 
-database.initialize_database()
+try:
+    database.initialize_database()
+except Exception as e:
+    print(f"Warning: initialize_database encountered non-fatal error: {e}")
 
 import api as consent_api
-consent_api.load_active_notice()
+
+try:
+    consent_api.load_active_notice()
+except Exception as e:
+    print(f"Warning: load_active_notice encountered non-fatal error: {e}")
+
 app = consent_api.app

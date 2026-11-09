@@ -574,25 +574,46 @@ def seed_purposes_and_consumers(connection):
 
     # 1. Seed Purposes
     for p in DEFAULT_PURPOSES:
-        connection.execute(
-            """
-            INSERT INTO purposes (id, name, description, allowed_fields, mock_data, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET
-                name = excluded.name,
-                description = excluded.description,
-                allowed_fields = excluded.allowed_fields,
-                mock_data = excluded.mock_data
-            """,
-            (
-                p["id"],
-                p["name"],
-                p["description"],
-                json.dumps(p["allowed_fields"]),
-                json.dumps(p["mock_data"]),
-                now_str,
-            ),
-        )
+        try:
+            existing = connection.execute(
+                "SELECT id FROM purposes WHERE id = ?",
+                (p["id"],),
+            ).fetchone()
+            if existing:
+                connection.execute(
+                    """
+                    UPDATE purposes SET
+                        name = ?,
+                        description = ?,
+                        allowed_fields = ?,
+                        mock_data = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        p["name"],
+                        p["description"],
+                        json.dumps(p["allowed_fields"]),
+                        json.dumps(p["mock_data"]),
+                        p["id"],
+                    ),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO purposes (id, name, description, allowed_fields, mock_data, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        p["id"],
+                        p["name"],
+                        p["description"],
+                        json.dumps(p["allowed_fields"]),
+                        json.dumps(p["mock_data"]),
+                        now_str,
+                    ),
+                )
+        except Exception:
+            pass
 
     # 2. Seed Consumers
     consumers = [
@@ -615,18 +636,33 @@ def seed_purposes_and_consumers(connection):
     ]
 
     for cid, name, key_h, allowed_purp, active, c_at in consumers:
-        connection.execute(
-            """
-            INSERT INTO consumers (consumer_id, name, api_key_hash, allowed_purposes, is_active, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (consumer_id) DO UPDATE SET
-                name = excluded.name,
-                api_key_hash = excluded.api_key_hash,
-                allowed_purposes = excluded.allowed_purposes,
-                is_active = excluded.is_active
-            """,
-            (cid, name, key_h, allowed_purp, active, c_at),
-        )
+        try:
+            existing = connection.execute(
+                "SELECT id FROM consumers WHERE consumer_id = ?",
+                (cid,),
+            ).fetchone()
+            if existing:
+                connection.execute(
+                    """
+                    UPDATE consumers SET
+                        name = ?,
+                        api_key_hash = ?,
+                        allowed_purposes = ?,
+                        is_active = ?
+                    WHERE consumer_id = ?
+                    """,
+                    (name, key_h, allowed_purp, active, cid),
+                )
+            else:
+                connection.execute(
+                    """
+                    INSERT INTO consumers (consumer_id, name, api_key_hash, allowed_purposes, is_active, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (cid, name, key_h, allowed_purp, active, c_at),
+                )
+        except Exception:
+            pass
 
 
 def get_active_notice_from_db():
@@ -824,7 +860,14 @@ def initialize_database():
             """
         )
 
-        if not pg:
+        if pg:
+            try:
+                connection.execute(
+                    "ALTER TABLE notice_versions ADD COLUMN IF NOT EXISTS is_active INTEGER NOT NULL DEFAULT 1;"
+                )
+            except Exception:
+                pass
+        else:
             notice_cols = [
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(notice_versions)").fetchall()
@@ -839,7 +882,7 @@ def initialize_database():
             """
             CREATE TABLE IF NOT EXISTS purposes (
                 id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
+                name TEXT NOT NULL DEFAULT '',
                 description TEXT NOT NULL,
                 allowed_fields TEXT NOT NULL,
                 mock_data TEXT NOT NULL,
@@ -848,7 +891,14 @@ def initialize_database():
             """
         )
 
-        if not pg:
+        if pg:
+            try:
+                connection.execute(
+                    "ALTER TABLE purposes ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';"
+                )
+            except Exception:
+                pass
+        else:
             purp_cols = [
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(purposes)").fetchall()
@@ -863,7 +913,7 @@ def initialize_database():
             f"""
             CREATE TABLE IF NOT EXISTS consumers (
                 {id_primary},
-                consumer_id TEXT UNIQUE NOT NULL,
+                consumer_id TEXT NOT NULL DEFAULT '',
                 name TEXT NOT NULL,
                 api_key_hash TEXT NOT NULL,
                 allowed_purposes TEXT NOT NULL,
@@ -873,7 +923,14 @@ def initialize_database():
             """
         )
 
-        if not pg:
+        if pg:
+            try:
+                connection.execute(
+                    "ALTER TABLE consumers ADD COLUMN IF NOT EXISTS consumer_id TEXT NOT NULL DEFAULT '';"
+                )
+            except Exception:
+                pass
+        else:
             cons_cols = [
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(consumers)").fetchall()
@@ -885,14 +942,27 @@ def initialize_database():
 
         # Seed initial notice version if not present
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
-        connection.execute(
-            """
-            INSERT INTO notice_versions (version, text, hash, is_active, created_at)
-            VALUES (?, ?, ?, 1, ?)
-            ON CONFLICT (version) DO NOTHING
-            """,
-            (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH, now_str),
-        )
+        try:
+            connection.execute(
+                """
+                INSERT INTO notice_versions (version, text, hash, is_active, created_at)
+                VALUES (?, ?, ?, 1, ?)
+                ON CONFLICT (version) DO NOTHING
+                """,
+                (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH, now_str),
+            )
+        except Exception:
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO notice_versions (version, text, hash, created_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT (version) DO NOTHING
+                    """,
+                    (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH, now_str),
+                )
+            except Exception:
+                pass
 
         # Seed purposes and consumers
         seed_purposes_and_consumers(connection)
