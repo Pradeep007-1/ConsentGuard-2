@@ -1,0 +1,621 @@
+import concurrent.futures
+import hashlib
+import json
+import os
+import sqlite3
+import sys
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+BACKEND_DIR = ROOT_DIR / "backend"
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+import api
+import database
+from database import (
+    DEFAULT_NOTICE_HASH,
+    DEFAULT_NOTICE_TEXT,
+    DEFAULT_NOTICE_VERSION,
+    DEFAULT_PARTNER_ALL_KEY,
+    DEFAULT_PARTNER_LIMITED_KEY,
+    GENESIS_PREV_HASH,
+    append_audit_event,
+    compute_canonical_audit_hash,
+    get_connection,
+    hash_api_key,
+    initialize_database,
+    sanitize_audit_details,
+    verify_audit_chain,
+)
+
+
+@pytest.fixture
+def enterprise_app():
+    """Provides an isolated Flask test client with a fresh temporary SQLite database."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+        test_db = Path(temp_dir) / "enterprise_test.db"
+        with patch.object(database, "DATABASE_PATH", test_db):
+            with patch.dict(os.environ, {"DATABASE_URL": ""}):
+                database.initialize_database()
+                api.load_active_notice()
+
+                api.app.config["TESTING"] = True
+                client = api.app.test_client()
+                yield client, test_db
+
+
+def test_01_grant_consent_success(enterprise_app):
+    """Test 1: Normal consent grant under current active notice succeeds."""
+    client, _ = enterprise_app
+    # Sign up user
+    res = client.post("/api/auth/signup", json={"name": "Alice Enterprise", "email": "alice@corp.test", "password": "Password123!"})
+    assert res.status_code == 201
+    user_id = res.get_json()["user"]["id"]
+
+    grant_res = client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    assert grant_res.status_code == 201
+    assert grant_res.get_json()["granted"] is True
+    assert grant_res.get_json()["notice_version"] == DEFAULT_NOTICE_VERSION
+
+
+def test_02_grant_outdated_notice_hash_rejected_409(enterprise_app):
+    """Test 2: Submitting an outdated notice hash on grant is rejected with 409 STALE_NOTICE."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Bob Stale", "email": "bob@stale.test", "password": "Password123!"})
+
+    stale_hash = "deadbeef" * 8
+    res = client.post("/api/consents", json={
+        "purpose": "Analytics",
+        "action": "grant",
+        "notice_version": "0.9",
+        "notice_hash": stale_hash,
+    })
+    assert res.status_code == 409
+    data = res.get_json()
+    assert data["reason_code"] == "STALE_NOTICE"
+    assert "stale" in data["error"].lower()
+
+
+def test_03_stale_grant_logged_in_audit_chain(enterprise_app):
+    """Test 3: Stale consent attempts are explicitly logged in the audit ledger."""
+    client, test_db = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Carol Stale", "email": "carol@stale.test", "password": "Password123!"})
+
+    stale_hash = "12345678" * 8
+    client.post("/api/consents", json={
+        "purpose": "Marketing",
+        "action": "grant",
+        "notice_version": "0.5",
+        "notice_hash": stale_hash,
+    })
+
+    conn = sqlite3.connect(str(test_db))
+    conn.row_factory = sqlite3.Row
+    row = conn.execute("SELECT * FROM audit_events WHERE reason_code = 'STALE_NOTICE'").fetchone()
+    conn.close()
+    assert row is not None
+    assert row["action"] == "consent_rejected_stale"
+    assert row["http_status"] == 409
+
+
+def test_04_idempotent_withdrawal(enterprise_app):
+    """Test 4: Withdrawing consent twice is idempotent and does not generate redundant duplicate audit rows."""
+    client, test_db = enterprise_app
+    client.post("/api/auth/signup", json={"name": "David Idemp", "email": "david@corp.test", "password": "Password123!"})
+
+    # Initial grant
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    # First withdrawal
+    w1 = client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    assert w1.status_code == 201
+
+    conn = sqlite3.connect(str(test_db))
+    withdraw_count_1 = conn.execute("SELECT COUNT(*) FROM audit_events WHERE action = 'withdraw'").fetchone()[0]
+
+    # Second withdrawal (idempotent)
+    w2 = client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    assert w2.status_code == 200
+    assert w2.get_json()["reason_code"] == "CONSENT_ALREADY_WITHDRAWN"
+
+    withdraw_count_2 = conn.execute("SELECT COUNT(*) FROM audit_events WHERE action = 'withdraw'").fetchone()[0]
+    conn.close()
+    assert withdraw_count_2 == withdraw_count_1
+
+
+def test_05_withdrawn_consent_immediately_blocks_downstream(enterprise_app):
+    """Test 5: Withdrawing consent immediately blocks downstream data access."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Eve Block", "email": "eve@block.test", "password": "Password123!"})
+
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    assert client.post("/api/data-access", json={"purpose": "Analytics"}).status_code == 200
+
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    blocked = client.post("/api/data-access", json={"purpose": "Analytics"})
+    assert blocked.status_code == 403
+    assert blocked.get_json()["reason_code"] == "WITHDRAWN"
+
+
+def test_06_reconsent_after_withdrawal_restores_access(enterprise_app):
+    """Test 6: Re-consenting after withdrawal immediately restores downstream access."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Frank Reconsent", "email": "frank@test.com", "password": "Password123!"})
+
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    assert client.post("/api/data-access", json={"purpose": "Analytics"}).status_code == 403
+
+    re_res = client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    assert re_res.status_code == 201
+    assert client.post("/api/data-access", json={"purpose": "Analytics"}).status_code == 200
+
+
+def test_07_notice_version_conflict_rejected_409(enterprise_app):
+    """Test 7: Attempting to create a conflicting notice version with different text returns 409 VERSION_EXISTS."""
+    client, _ = enterprise_app
+    # Try updating v1.0 with differing text
+    res = client.post("/api/notice/update", json={
+        "notice_version": DEFAULT_NOTICE_VERSION,
+        "notice_text": "Conflicting divergent text for version 1.0",
+    })
+    assert res.status_code == 409
+    assert res.get_json()["reason_code"] == "VERSION_EXISTS"
+
+
+def test_08_atomic_notice_upgrade_and_active_flag(enterprise_app):
+    """Test 8: Publishing a new notice atomically marks the previous notice inactive and the new active."""
+    client, test_db = enterprise_app
+    res = client.post("/api/notice/update", json={
+        "notice_version": "2.0",
+        "notice_text": "ConsentGuard v2.0 Enterprise Privacy Notice with enhanced telemetry controls.",
+    })
+    assert res.status_code == 200
+    assert res.get_json()["notice_version"] == "2.0"
+
+    conn = sqlite3.connect(str(test_db))
+    conn.row_factory = sqlite3.Row
+    v1_row = conn.execute("SELECT is_active FROM notice_versions WHERE version = '1.0'").fetchone()
+    v2_row = conn.execute("SELECT is_active FROM notice_versions WHERE version = '2.0'").fetchone()
+    conn.close()
+
+    assert v1_row["is_active"] == 0
+    assert v2_row["is_active"] == 1
+
+
+def test_09_stale_consent_blocked_after_notice_bump(enterprise_app):
+    """Test 9: Consent granted under notice v1.0 is blocked when notice is bumped to v2.0 until re-consent."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Grace Bump", "email": "grace@bump.test", "password": "Password123!"})
+
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    assert client.post("/api/data-access", json={"purpose": "Analytics"}).status_code == 200
+
+    # Bump notice to v2.0
+    client.post("/api/notice/update", json={"notice_version": "2.0"})
+
+    # Prior consent is now stale
+    blocked = client.post("/api/data-access", json={"purpose": "Analytics"})
+    assert blocked.status_code == 403
+    assert blocked.get_json()["reason_code"] == "NOTICE_MISMATCH"
+
+    # Re-consent under v2.0 restores access
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    assert client.post("/api/data-access", json={"purpose": "Analytics"}).status_code == 200
+
+
+def test_10_downstream_share_invalid_api_key_401(enterprise_app):
+    """Test 10: Downstream /api/share/request with an invalid or missing API key is rejected with HTTP 401."""
+    client, _ = enterprise_app
+    res = client.post("/api/share/request", json={
+        "api_key": "invalid_forged_key_12345",
+        "user_id": "demo-user",
+        "purpose": "Analytics",
+    })
+    assert res.status_code == 401
+    assert res.get_json()["reason_code"] == "INVALID_API_KEY"
+
+
+def test_11_downstream_share_consumer_not_authorized_403(enterprise_app):
+    """Test 11: Consumer partner-limited requesting Marketing data is blocked with 403 CONSUMER_NOT_AUTHORIZED."""
+    client, _ = enterprise_app
+    res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_LIMITED_KEY,
+        "user_id": "demo-user",
+        "purpose": "Marketing",  # partner-limited is only authorized for Analytics
+    })
+    assert res.status_code == 403
+    assert res.get_json()["reason_code"] == "CONSUMER_NOT_AUTHORIZED"
+
+
+def test_12_downstream_share_invalid_purpose_400(enterprise_app):
+    """Test 12: Requesting an unrecognized purpose returns HTTP 400 INVALID_PURPOSE."""
+    client, _ = enterprise_app
+    res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_ALL_KEY,
+        "user_id": "demo-user",
+        "purpose": "Biometric Surveillance",
+    })
+    assert res.status_code == 400
+    assert res.get_json()["reason_code"] == "INVALID_PURPOSE"
+
+
+def test_13_downstream_share_unknown_user_404(enterprise_app):
+    """Test 13: Requesting data for an unknown user returns HTTP 404 USER_NOT_FOUND."""
+    client, _ = enterprise_app
+    res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_ALL_KEY,
+        "user_id": "non_existent_ghost_user_99999",
+        "purpose": "Analytics",
+    })
+    assert res.status_code == 404
+    assert res.get_json()["reason_code"] == "USER_NOT_FOUND"
+
+
+def test_14_downstream_share_no_consent_403(enterprise_app):
+    """Test 14: Downstream access when user has not granted consent returns HTTP 403 NO_CONSENT."""
+    client, _ = enterprise_app
+    # user1 has no consent granted
+    res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_ALL_KEY,
+        "user_id": "user1",
+        "purpose": "Analytics",
+    })
+    assert res.status_code == 403
+    assert res.get_json()["reason_code"] == "NO_CONSENT"
+
+
+def test_15_downstream_share_unauthorized_fields_403(enterprise_app):
+    """Test 15: Requesting unauthorized fields returns HTTP 403 UNAUTHORIZED_FIELDS."""
+    client, _ = enterprise_app
+    # demo-user has Analytics consent
+    res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_ALL_KEY,
+        "user_id": "demo-user",
+        "purpose": "Analytics",
+        "requested_fields": ["page_views", "ssn_or_credit_card"],  # unpermitted field
+    })
+    assert res.status_code == 403
+    assert res.get_json()["reason_code"] == "UNAUTHORIZED_FIELDS"
+
+
+def test_16_downstream_share_valid_request_allowed_200(enterprise_app):
+    """Test 16: Authorized partner request with valid consent releases only permitted fields with HTTP 200."""
+    client, _ = enterprise_app
+    res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_ALL_KEY,
+        "user_id": "demo-user",
+        "purpose": "Analytics",
+        "requested_fields": ["page_views"],
+    })
+    assert res.status_code == 200
+    data = res.get_json()
+    assert data["allowed"] is True
+    assert data["reason_code"] == "ACTIVE_CONSENT"
+    assert "page_views" in data["data"]
+    assert "feature_usage" not in data["data"]  # unrequested allowed field filtered out
+
+
+def test_17_fourth_purpose_database_driven_without_code_changes(enterprise_app):
+    """Test 17: Adding a 4th purpose in the database works immediately without modifying authorization code."""
+    client, test_db = enterprise_app
+    now_str = "2026-11-09T18:00:00.000000Z"
+
+    # Insert 4th purpose into purposes table
+    conn = sqlite3.connect(str(test_db))
+    conn.execute(
+        """
+        INSERT INTO purposes (id, name, description, allowed_fields, mock_data, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (
+            "Fraud Detection",
+            "Fraud Detection",
+            "Monitors anomalous transaction volumes and device fingerprints.",
+            json.dumps(["device_risk_score", "ip_reputation"]),
+            json.dumps({"device_risk_score": 0.04, "ip_reputation": "clean"}),
+            now_str,
+        ),
+    )
+    # Grant partner-all permission for 4th purpose
+    conn.execute(
+        """
+        UPDATE consumers SET allowed_purposes = ? WHERE consumer_id = 'partner-all'
+        """,
+        (json.dumps(["Analytics", "Marketing", "Service Improvement", "Fraud Detection"]),),
+    )
+    conn.commit()
+    conn.close()
+
+    # Create user and grant consent for the 4th purpose
+    client.post("/api/auth/signup", json={"name": "Hannah Dynamic", "email": "hannah@dynamic.test", "password": "Password123!"})
+    grant_res = client.post("/api/consents", json={"purpose": "Fraud Detection", "action": "grant"})
+    assert grant_res.status_code == 201
+
+    # Partner requests data for 4th purpose -> immediately ALLOWED
+    share_res = client.post("/api/share/request", json={
+        "api_key": DEFAULT_PARTNER_ALL_KEY,
+        "user_id": grant_res.get_json()["user_id"],
+        "purpose": "Fraud Detection",
+        "requested_fields": ["device_risk_score"],
+    })
+    assert share_res.status_code == 200
+    assert share_res.get_json()["allowed"] is True
+    assert "device_risk_score" in share_res.get_json()["data"]
+
+
+def test_18_audit_immutability_sqlite_trigger_blocks_update(enterprise_app):
+    """Test 18: Direct database UPDATE on audit_events is blocked by cryptographic immutability triggers."""
+    _, test_db = enterprise_app
+    conn = sqlite3.connect(str(test_db))
+    try:
+        row = conn.execute("SELECT id FROM audit_events LIMIT 1").fetchone()
+        assert row is not None
+        audit_id = row[0]
+
+        with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)) as exc_info:
+            conn.execute("UPDATE audit_events SET action = 'tampered_action' WHERE id = ?", (audit_id,))
+        assert "immutable" in str(exc_info.value).lower()
+    finally:
+        conn.close()
+
+
+def test_19_audit_immutability_sqlite_trigger_blocks_delete(enterprise_app):
+    """Test 19: Direct database DELETE on audit_events is blocked by cryptographic immutability triggers."""
+    _, test_db = enterprise_app
+    conn = sqlite3.connect(str(test_db))
+    try:
+        row = conn.execute("SELECT id FROM audit_events LIMIT 1").fetchone()
+        assert row is not None
+        audit_id = row[0]
+
+        with pytest.raises((sqlite3.IntegrityError, sqlite3.OperationalError)) as exc_info:
+            conn.execute("DELETE FROM audit_events WHERE id = ?", (audit_id,))
+        assert "immutable" in str(exc_info.value).lower()
+    finally:
+        conn.close()
+
+
+def test_20_canonical_json_audit_hash_integrity():
+    """Test 20: Canonical JSON hash is deterministic and strictly formatted across all fields including details."""
+    h1 = compute_canonical_audit_hash(
+        prev_hash="0" * 64,
+        user_id="user_123",
+        purpose="Analytics",
+        action="grant",
+        http_status=200,
+        reason_code="CONSENT_RECORDED",
+        notice_version="1.0",
+        notice_hash="hash_abc",
+        source="user",
+        created_at="2026-11-09T18:00:00.000000Z",
+        details="Consent decision recorded.",
+    )
+    assert len(h1) == 64
+
+    # Identical inputs produce identical hash
+    h2 = compute_canonical_audit_hash(
+        prev_hash="0" * 64,
+        user_id="user_123",
+        purpose="Analytics",
+        action="grant",
+        http_status=200,
+        reason_code="CONSENT_RECORDED",
+        notice_version="1.0",
+        notice_hash="hash_abc",
+        source="user",
+        created_at="2026-11-09T18:00:00.000000Z",
+        details="Consent decision recorded.",
+    )
+    assert h1 == h2
+
+    # Modified detail produces different hash
+    h3 = compute_canonical_audit_hash(
+        prev_hash="0" * 64,
+        user_id="user_123",
+        purpose="Analytics",
+        action="grant",
+        http_status=200,
+        reason_code="CONSENT_RECORDED",
+        notice_version="1.0",
+        notice_hash="hash_abc",
+        source="user",
+        created_at="2026-11-09T18:00:00.000000Z",
+        details="Tampered detail.",
+    )
+    assert h1 != h3
+
+
+def test_21_audit_pii_sanitization():
+    """Test 21: Audit details sanitize sensitive credentials, emails, and tokens."""
+    dirty = "User pradeep@consentguard.local authorized with Bearer eyJhbGciOiJIUzI1NiIsIn and api_key=secret_12345678"
+    clean = sanitize_audit_details(dirty)
+    assert "pradeep@consentguard.local" not in clean
+    assert "[REDACTED_EMAIL]" in clean
+    assert "eyJhbGciOiJIUzI1NiIsIn" not in clean
+    assert "secret_12345678" not in clean
+    assert "[REDACTED_SECRET]" in clean
+
+
+def test_22_admin_authorization_constant_time_key(enterprise_app):
+    """Test 22: Constant-time X-Admin-Key authorization succeeds with valid key and rejects invalid key."""
+    client, _ = enterprise_app
+    with patch.dict(os.environ, {"ADMIN_KEY": "super_secret_admin_token"}):
+        # Invalid key -> 403
+        bad_res = client.post("/api/notice/update", headers={"X-Admin-Key": "wrong_key"}, json={"notice_version": "2.1"})
+        assert bad_res.status_code == 403
+        assert bad_res.get_json()["reason_code"] == "INVALID_ADMIN_KEY"
+
+        # Valid key -> 200
+        good_res = client.post("/api/notice/update", headers={"X-Admin-Key": "super_secret_admin_token"}, json={"notice_version": "2.1"})
+        assert good_res.status_code == 200
+
+
+def test_23_admin_endpoints_reject_unauthorized_visitor(enterprise_app):
+    """Test 23: Administrative notice update and reset reject unauthenticated visitor requests without admin key."""
+    client, _ = enterprise_app
+    api.app.config["TESTING"] = False  # Disable testing bypass
+    unauth_client = api.app.test_client()
+
+    u_res = unauth_client.post("/api/notice/update", json={"notice_version": "3.0"})
+    assert u_res.status_code == 401
+    assert u_res.get_json()["reason_code"] == "ADMIN_AUTH_REQUIRED"
+
+    r_res = unauth_client.post("/api/notice/reset")
+    assert r_res.status_code == 401
+    assert r_res.get_json()["reason_code"] == "ADMIN_AUTH_REQUIRED"
+
+
+def test_24_source_test_cannot_bypass_real_user_boundaries(enterprise_app):
+    """Test 24: Supplying source='test' cannot modify or read another real registered user's records."""
+    client, _ = enterprise_app
+    # Create User Alpha
+    r1 = client.post("/api/auth/signup", json={"name": "Alpha", "email": "alpha@bank.test", "password": "Password123!"})
+    alpha_id = r1.get_json()["user"]["id"]
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+
+    # Create User Beta
+    r2 = client.post("/api/auth/signup", json={"name": "Beta", "email": "beta@bank.test", "password": "Password123!"})
+    beta_id = r2.get_json()["user"]["id"]
+
+    # Beta attempts to read Alpha's audit events claiming source=test
+    audit_tamper = client.get(f"/api/audit?user_id={alpha_id}&source=test")
+    assert audit_tamper.status_code == 403
+    assert audit_tamper.get_json()["reason_code"] == "FORBIDDEN_CROSS_USER_ACCESS"
+
+    # Beta attempts to withdraw Alpha's consent claiming source=test
+    consent_tamper = client.post("/api/consents", json={
+        "user_id": alpha_id,
+        "purpose": "Analytics",
+        "action": "withdraw",
+        "source": "test",
+    })
+    assert consent_tamper.status_code == 403
+    assert consent_tamper.get_json()["reason_code"] == "FORBIDDEN_CROSS_USER_ACCESS"
+
+
+def test_25_bearer_token_and_session_authentication(enterprise_app):
+    """Test 25: Bearer token in Authorization header authenticates user requests across all endpoints."""
+    client, _ = enterprise_app
+    r = client.post("/api/auth/signup", json={"name": "Ivan Token", "email": "ivan@token.test", "password": "Password123!"})
+    token = r.get_json()["token"]
+
+    # Clear cookie session
+    with client.session_transaction() as sess:
+        sess.clear()
+
+    # Make request with Authorization: Bearer <token>
+    auth_header = {"Authorization": f"Bearer {token}"}
+    me_res = client.get("/api/auth/me", headers=auth_header)
+    assert me_res.status_code == 200
+    assert me_res.get_json()["authenticated"] is True
+    assert me_res.get_json()["user"]["name"] == "Ivan Token"
+
+
+def test_26_merkle_dag_branching_and_tamper_detection():
+    """Test 26: Merkle DAG allows concurrent write sibling branching but immediately detects hash tampering."""
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.execute("""
+        CREATE TABLE audit_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            purpose TEXT NOT NULL,
+            action TEXT NOT NULL,
+            http_status INTEGER NOT NULL,
+            reason_code TEXT NOT NULL,
+            notice_version TEXT NOT NULL,
+            notice_hash TEXT NOT NULL,
+            short_notice_hash TEXT,
+            source TEXT NOT NULL,
+            prev_hash TEXT NOT NULL,
+            row_hash TEXT NOT NULL,
+            details TEXT,
+            created_at TEXT NOT NULL
+        )
+    """)
+
+    # Event 1 (Parent / Genesis)
+    h1 = append_audit_event(conn, "u1", "Analytics", "grant", 200, "OK", "1.0", "h", source="w1")
+    # Event 2 (Sibling A off Event 1)
+    h2 = append_audit_event(conn, "u2", "Marketing", "grant", 200, "OK", "1.0", "h", source="w2")
+
+    # Event 3 (Sibling B concurrently written off Event 1, pointing to h1 instead of h2)
+    now_str = "2026-11-09T18:00:00.000000Z"
+    h3 = compute_canonical_audit_hash(
+        prev_hash=h1,
+        user_id="u3",
+        purpose="Service Improvement",
+        action="grant",
+        http_status=200,
+        reason_code="OK",
+        notice_version="1.0",
+        notice_hash="h",
+        source="w3",
+        created_at=now_str,
+        details="",
+    )
+    conn.execute(
+        """
+        INSERT INTO audit_events
+            (user_id, purpose, action, http_status, reason_code, notice_version,
+             notice_hash, short_notice_hash, source, prev_hash, row_hash, details, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        ("u3", "Service Improvement", "grant", 200, "OK", "1.0", "h", "", "w3", h1, h3, "", now_str),
+    )
+
+    # DAG verification succeeds across sibling branches
+    dag_res = verify_audit_chain(conn, strict_linear=False)
+    assert dag_res["status"] == "intact"
+    assert dag_res["branches_count"] == 1
+
+    # Strict linear verification detects the branch
+    strict_res = verify_audit_chain(conn, strict_linear=True)
+    assert strict_res["status"] == "broken"
+    assert strict_res["reason_code"] == "BRANCH_DETECTED"
+    conn.close()
+
+
+def test_27_audit_export_authenticated_csv_and_json(enterprise_app):
+    """Test 27: Audit export is restricted to authenticated users and provides valid CSV and JSON."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Julia Export", "email": "julia@export.test", "password": "Password123!"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+
+    csv_res = client.get("/api/audit/export?format=csv")
+    assert csv_res.status_code == 200
+    assert "text/csv" in csv_res.content_type
+    assert "user_id,purpose,action" in csv_res.get_data(as_text=True)
+
+    json_res = client.get("/api/audit/export?format=json")
+    assert json_res.status_code == 200
+    assert "application/json" in json_res.content_type
+    json_data = json_res.get_json()
+    assert isinstance(json_data, list)
+    assert len(json_data) >= 2
+
+
+def test_28_demo_reset_preserves_immutable_audit_history(enterprise_app):
+    """Test 28: /api/demo/reset resets consent states to defaults without deleting immutable audit events."""
+    client, test_db = enterprise_app
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+
+    conn = sqlite3.connect(str(test_db))
+    audit_count_before = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
+    conn.close()
+
+    reset_res = client.post("/api/demo/reset")
+    assert reset_res.status_code == 200
+
+    conn = sqlite3.connect(str(test_db))
+    audit_count_after = conn.execute("SELECT COUNT(*) FROM audit_events").fetchone()[0]
+    conn.close()
+
+    # Audits were NOT deleted, reset event was added
+    assert audit_count_after > audit_count_before

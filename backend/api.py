@@ -227,9 +227,10 @@ def check_admin_auth():
     2. Allows logged-in authenticated users to preserve dashboard controls.
     3. Allows automated test runners (TESTING config or X-Test-Source).
     """
+    current_admin_key = os.environ.get("ADMIN_KEY", ADMIN_KEY)
     admin_header = request.headers.get("X-Admin-Key", "").strip()
     if admin_header:
-        if hmac.compare_digest(admin_header.encode("utf-8"), ADMIN_KEY.encode("utf-8")):
+        if hmac.compare_digest(admin_header.encode("utf-8"), current_admin_key.encode("utf-8")):
             return True, None
         return False, (
             jsonify({
@@ -730,7 +731,33 @@ def evaluate_policy_and_consent(
         now_ver = NOTICE_VERSION
         now_hash = NOTICE_HASH
 
-        # 1. Consumer Authorization Check
+        # 1. Purpose Validity Check (Database-driven)
+        purpose_cfg = get_purpose_config(purpose, connection=connection)
+        if not purpose_cfg:
+            reason = f"Invalid purpose '{purpose}'."
+            action_name = "data_share_denied" if consumer else "data_access_denied"
+            append_audit_event(
+                connection=connection,
+                user_id=user_id or "unknown",
+                purpose=str(purpose),
+                action=action_name,
+                http_status=400,
+                reason_code="INVALID_PURPOSE",
+                notice_version=now_ver,
+                notice_hash=now_hash,
+                source=source,
+                details=f"PEP validation rejected: {reason}",
+            )
+            return {
+                "allowed": False,
+                "http_status": 400,
+                "reason_code": "INVALID_PURPOSE",
+                "reason": reason,
+                "error": reason,
+                "valid_purposes": sorted(PURPOSES),
+            }
+
+        # 2. Consumer Purpose Authorization Check
         if consumer:
             allowed_purposes = consumer.get("allowed_purposes") or []
             if isinstance(allowed_purposes, str):
@@ -760,65 +787,33 @@ def evaluate_policy_and_consent(
                     "error": reason,
                 }
 
-        # 2. Purpose Validity Check
-        purpose_cfg = get_purpose_config(purpose, connection=connection)
-        if not purpose_cfg:
-            reason = f"Invalid purpose '{purpose}'."
-            action_name = "data_share_denied" if consumer else "data_access_denied"
-            append_audit_event(
-                connection=connection,
-                user_id=user_id or "unknown",
-                purpose=str(purpose),
-                action=action_name,
-                http_status=400,
-                reason_code="INVALID_PURPOSE",
-                notice_version=now_ver,
-                notice_hash=now_hash,
-                source=source,
-                details=f"PEP validation rejected: {reason}",
-            )
-            return {
-                "allowed": False,
-                "http_status": 400,
-                "reason_code": "INVALID_PURPOSE",
-                "reason": reason,
-                "error": reason,
-                "valid_purposes": sorted(PURPOSES),
-            }
-
         # 3. User Existence Check
         user_row = connection.execute(
             "SELECT id FROM users WHERE id = ?",
             (user_id,),
         ).fetchone()
-        if not user_row:
-            # Synthetic users permitted in automated unit test mode
-            is_synthetic_test = bool(
-                app.config.get("TESTING")
-                or source == "test"
-                or (user_id and str(user_id).startswith(("test-", "suite-", "user_")))
+
+        if consumer and not user_row:
+            reason = f"User '{user_id}' not found."
+            append_audit_event(
+                connection=connection,
+                user_id=str(user_id or "unknown"),
+                purpose=purpose,
+                action="data_share_denied",
+                http_status=404,
+                reason_code="USER_NOT_FOUND",
+                notice_version=now_ver,
+                notice_hash=now_hash,
+                source=source,
+                details=f"PEP request rejected: {reason}",
             )
-            if consumer and not is_synthetic_test:
-                reason = f"User '{user_id}' not found."
-                append_audit_event(
-                    connection=connection,
-                    user_id=str(user_id or "unknown"),
-                    purpose=purpose,
-                    action="data_share_denied",
-                    http_status=404,
-                    reason_code="USER_NOT_FOUND",
-                    notice_version=now_ver,
-                    notice_hash=now_hash,
-                    source=source,
-                    details=f"PEP request rejected: {reason}",
-                )
-                return {
-                    "allowed": False,
-                    "http_status": 404,
-                    "reason_code": "USER_NOT_FOUND",
-                    "reason": reason,
-                    "error": reason,
-                }
+            return {
+                "allowed": False,
+                "http_status": 404,
+                "reason_code": "USER_NOT_FOUND",
+                "reason": reason,
+                "error": reason,
+            }
 
         # 4. Consent Decision on Record
         consent_row = connection.execute(
