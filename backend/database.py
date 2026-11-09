@@ -1,5 +1,7 @@
 import hashlib
+import json
 import os
+import re
 import sqlite3
 import ssl
 import threading
@@ -175,6 +177,57 @@ def get_connection():
             connection.close()
 
 
+def sanitize_audit_details(details: str) -> str:
+    """Strips any sensitive credentials, tokens, or email addresses from audit details."""
+    if not details:
+        return ""
+    text = str(details)
+    # Redact email addresses
+    text = re.sub(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+", "[REDACTED_EMAIL]", text)
+    # Redact bearer tokens, API keys, and secrets
+    text = re.sub(
+        r"(Bearer\s+|api_key=|key=|secret=|token=|password=)[a-zA-Z0-9_\-\.]{8,}",
+        r"\1[REDACTED_SECRET]",
+        text,
+        flags=re.IGNORECASE,
+    )
+    return text
+
+
+def compute_canonical_audit_hash(
+    prev_hash,
+    user_id,
+    purpose,
+    action,
+    http_status,
+    reason_code,
+    notice_version,
+    notice_hash,
+    source,
+    created_at,
+    details="",
+):
+    """
+    Computes cryptographic SHA-256 hash using canonical JSON formatting
+    (sort_keys=True, separators=(',', ':')) across ALL audit fields including details.
+    """
+    payload = {
+        "action": str(action or ""),
+        "created_at": str(created_at or ""),
+        "details": str(details or ""),
+        "http_status": int(http_status) if http_status is not None else None,
+        "notice_hash": str(notice_hash or ""),
+        "notice_version": str(notice_version or ""),
+        "prev_hash": str(prev_hash or ""),
+        "purpose": str(purpose or ""),
+        "reason_code": str(reason_code or ""),
+        "source": str(source or ""),
+        "user_id": str(user_id or ""),
+    }
+    canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
+
 def compute_audit_hash(
     prev_hash,
     user_id,
@@ -187,6 +240,7 @@ def compute_audit_hash(
     source,
     created_at,
 ):
+    """Legacy pipe-delimited hash calculation preserved for historical record verification."""
     raw = (
         f"{prev_hash}|{user_id}|{purpose}|{action}|{http_status}|"
         f"{reason_code}|{notice_version}|{notice_hash}|{source}|{created_at}"
@@ -206,14 +260,25 @@ def append_audit_event(
     source="user",
     details="",
 ):
-    # Serialize concurrent transactions on PostgreSQL to prevent sibling race-condition forks
+    # Serialize concurrent transactions on PostgreSQL using transaction-level advisory locks
     if is_postgres():
         try:
-            connection.execute("LOCK TABLE audit_events IN EXCLUSIVE MODE;")
+            connection.execute("SELECT pg_advisory_xact_lock(7429184);")
         except Exception:
-            pass
+            try:
+                connection.execute("LOCK TABLE audit_events IN EXCLUSIVE MODE;")
+            except Exception:
+                pass
+
+    clean_details = sanitize_audit_details(details)
 
     with _sqlite_audit_lock:
+        if not is_postgres():
+            try:
+                connection.execute("BEGIN IMMEDIATE")
+            except Exception:
+                pass
+
         created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         last_row = connection.execute(
             "SELECT row_hash FROM audit_events ORDER BY id DESC LIMIT 1"
@@ -221,17 +286,19 @@ def append_audit_event(
         prev_hash = last_row["row_hash"] if last_row and last_row["row_hash"] else GENESIS_PREV_HASH
         short_hash = notice_hash[:12] if notice_hash else ""
 
-        row_hash = compute_audit_hash(
-            prev_hash,
-            user_id,
-            purpose,
-            action,
-            http_status,
-            reason_code,
-            notice_version,
-            notice_hash,
-            source,
-            created_at,
+        # Use canonical JSON hashing covering all fields including details
+        row_hash = compute_canonical_audit_hash(
+            prev_hash=prev_hash,
+            user_id=user_id,
+            purpose=purpose,
+            action=action,
+            http_status=http_status,
+            reason_code=reason_code,
+            notice_version=notice_version,
+            notice_hash=notice_hash,
+            source=source,
+            created_at=created_at,
+            details=clean_details,
         )
 
         connection.execute(
@@ -254,11 +321,70 @@ def append_audit_event(
                 source,
                 prev_hash,
                 row_hash,
-                details,
+                clean_details,
                 created_at,
             ),
         )
         return row_hash
+
+
+def is_valid_row_hash(row) -> bool:
+    """
+    Validates row_hash against canonical JSON hashing first,
+    falling back to legacy pipe-delimited format for historical record compatibility.
+    """
+    row_h = row["row_hash"]
+    prev_h = row["prev_hash"]
+    user_id = row["user_id"]
+    purpose = row["purpose"]
+    action = row["action"]
+    http_status = row["http_status"]
+    reason_code = row["reason_code"]
+    notice_version = row["notice_version"]
+    notice_hash = row["notice_hash"]
+    source = row["source"]
+    created_at = row["created_at"]
+    
+    details = ""
+    try:
+        details = row["details"] or ""
+    except (IndexError, KeyError, TypeError):
+        pass
+
+    # 1. Canonical JSON (new standard)
+    canon = compute_canonical_audit_hash(
+        prev_hash=prev_h,
+        user_id=user_id,
+        purpose=purpose,
+        action=action,
+        http_status=http_status,
+        reason_code=reason_code,
+        notice_version=notice_version,
+        notice_hash=notice_hash,
+        source=source,
+        created_at=created_at,
+        details=details,
+    )
+    if row_h == canon:
+        return True
+
+    # 2. Legacy pipe-delimited (historical records)
+    legacy = compute_audit_hash(
+        prev_h,
+        user_id,
+        purpose,
+        action,
+        http_status,
+        reason_code,
+        notice_version,
+        notice_hash,
+        source,
+        created_at,
+    )
+    if row_h == legacy:
+        return True
+
+    return False
 
 
 def verify_audit_chain(connection, user_id=None, strict_linear=False):
@@ -281,21 +407,10 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
         ).fetchall()
 
         for idx, row in enumerate(user_rows):
-            expected_row_hash = compute_audit_hash(
-                row["prev_hash"],
-                row["user_id"],
-                row["purpose"],
-                row["action"],
-                row["http_status"],
-                row["reason_code"],
-                row["notice_version"],
-                row["notice_hash"],
-                row["source"],
-                row["created_at"],
-            )
-            if row["row_hash"] != expected_row_hash:
+            if not is_valid_row_hash(row):
                 return {
                     "status": "broken",
+                    "reason_code": "ROW_HASH_TAMPERED",
                     "verified_count": idx,
                     "total_count": len(user_rows),
                     "broken_at_id": row["id"],
@@ -329,22 +444,11 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
         prev_h = row["prev_hash"]
         row_h = row["row_hash"]
 
-        # 1. Verify self-hash integrity
-        expected_row_hash = compute_audit_hash(
-            prev_h,
-            row["user_id"],
-            row["purpose"],
-            row["action"],
-            row["http_status"],
-            row["reason_code"],
-            row["notice_version"],
-            row["notice_hash"],
-            row["source"],
-            row["created_at"],
-        )
-        if row_h != expected_row_hash:
+        # 1. Verify self-hash integrity (canonical JSON + legacy pipe fallback)
+        if not is_valid_row_hash(row):
             return {
                 "status": "broken",
+                "reason_code": "ROW_HASH_TAMPERED",
                 "verified_count": idx,
                 "total_count": len(rows),
                 "broken_at_id": cur_id,
@@ -356,6 +460,7 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
             if prev_h != GENESIS_PREV_HASH:
                 return {
                     "status": "broken",
+                    "reason_code": "GENESIS_PREV_HASH_MISMATCH",
                     "verified_count": 0,
                     "total_count": len(rows),
                     "broken_at_id": cur_id,
@@ -379,6 +484,7 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
                 if strict_linear:
                     return {
                         "status": "broken",
+                        "reason_code": "BRANCH_DETECTED",
                         "verified_count": idx,
                         "total_count": len(rows),
                         "broken_at_id": cur_id,
@@ -392,6 +498,7 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
                 # Unknown ancestor - genuine break or missing record
                 return {
                     "status": "broken",
+                    "reason_code": "BROKEN_ANCESTOR_LINK",
                     "verified_count": idx,
                     "total_count": len(rows),
                     "broken_at_id": cur_id,
@@ -412,8 +519,127 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
     }
 
 
+def hash_api_key(api_key: str) -> str:
+    """Computes SHA-256 hash of an API key for secure storage."""
+    if not api_key:
+        return ""
+    return hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+
+
+DEFAULT_PURPOSES = [
+    {
+        "id": "Analytics",
+        "name": "Analytics",
+        "description": "Collects page view frequencies, navigation journeys, and feature performance metrics.",
+        "allowed_fields": ["page_views", "feature_usage"],
+        "mock_data": {
+            "page_views": 1420,
+            "feature_usage": {"dashboard": 58, "export": 12, "audit_view": 34},
+        },
+    },
+    {
+        "id": "Marketing",
+        "name": "Marketing",
+        "description": "Enables tailored product recommendations, periodic digests, and customized campaign offers.",
+        "allowed_fields": ["email_preferences", "offers_enabled"],
+        "mock_data": {
+            "email_preferences": "weekly_digest",
+            "offers_enabled": True,
+            "preferred_category": "security_tools",
+        },
+    },
+    {
+        "id": "Service Improvement",
+        "name": "Service Improvement",
+        "description": "Helps improve application performance by analyzing crash reports, technical errors, and response times.",
+        "allowed_fields": ["app_performance_ms", "recent_error_count"],
+        "mock_data": {
+            "app_performance_ms": 145,
+            "recent_error_count": 0,
+            "uptime_percent": 99.98,
+        },
+    },
+]
+
+DEFAULT_PARTNER_ALL_KEY = "key_partner_all_enterprise"
+DEFAULT_PARTNER_LIMITED_KEY = "key_partner_limited_research"
+
+PARTNER_ALL_KEY = os.environ.get("PARTNER_ALL_KEY", DEFAULT_PARTNER_ALL_KEY)
+PARTNER_LIMITED_KEY = os.environ.get("PARTNER_LIMITED_KEY", DEFAULT_PARTNER_LIMITED_KEY)
+
+
+def seed_purposes_and_consumers(connection):
+    """Idempotently seeds baseline database-driven purposes and consumer partner credentials."""
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+    # 1. Seed Purposes
+    for p in DEFAULT_PURPOSES:
+        connection.execute(
+            """
+            INSERT INTO purposes (id, name, description, allowed_fields, mock_data, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (id) DO UPDATE SET
+                name = excluded.name,
+                description = excluded.description,
+                allowed_fields = excluded.allowed_fields,
+                mock_data = excluded.mock_data
+            """,
+            (
+                p["id"],
+                p["name"],
+                p["description"],
+                json.dumps(p["allowed_fields"]),
+                json.dumps(p["mock_data"]),
+                now_str,
+            ),
+        )
+
+    # 2. Seed Consumers
+    consumers = [
+        (
+            "partner-all",
+            "Partner All-Access Enterprise",
+            hash_api_key(PARTNER_ALL_KEY),
+            json.dumps(["Analytics", "Marketing", "Service Improvement"]),
+            1,
+            now_str,
+        ),
+        (
+            "partner-limited",
+            "Partner Limited Research",
+            hash_api_key(PARTNER_LIMITED_KEY),
+            json.dumps(["Analytics"]),
+            1,
+            now_str,
+        ),
+    ]
+
+    for cid, name, key_h, allowed_purp, active, c_at in consumers:
+        connection.execute(
+            """
+            INSERT INTO consumers (consumer_id, name, api_key_hash, allowed_purposes, is_active, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT (consumer_id) DO UPDATE SET
+                name = excluded.name,
+                api_key_hash = excluded.api_key_hash,
+                allowed_purposes = excluded.allowed_purposes,
+                is_active = excluded.is_active
+            """,
+            (cid, name, key_h, allowed_purp, active, c_at),
+        )
+
+
 def get_active_notice_from_db():
     with get_connection() as connection:
+        try:
+            row = connection.execute(
+                "SELECT version, text, hash FROM notice_versions WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if row:
+                return row["version"], row["text"], row["hash"]
+        except Exception:
+            pass
+
         row = connection.execute(
             "SELECT version, text, hash FROM notice_versions ORDER BY id DESC LIMIT 1"
         ).fetchone()
@@ -456,6 +682,25 @@ def seed_demo_users(connection):
             """,
             (uid, purpose, granted, ver, h, action, now_str),
         )
+
+    # Ensure baseline seeded consents also generate audit trail if none exists
+    existing_seed_audit = connection.execute(
+        "SELECT id FROM audit_events WHERE user_id = 'demo-user' AND source = 'system_seed' LIMIT 1"
+    ).fetchone()
+    if not existing_seed_audit:
+        for uid, purpose, granted, ver, h, action in demo_consents:
+            append_audit_event(
+                connection,
+                user_id=uid,
+                purpose=purpose,
+                action=action,
+                http_status=200,
+                reason_code="CONSENT_RECORDED",
+                notice_version=ver,
+                notice_hash=h,
+                source="system_seed",
+                details=f"Baseline system seed consent for {purpose}",
+            )
 
 
 def initialize_database():
@@ -530,6 +775,41 @@ def initialize_database():
             """
         )
 
+        # Immutability triggers for audit_events (SQLite & PostgreSQL)
+        if not pg:
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_prevent_audit_update
+                BEFORE UPDATE ON audit_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'Audit events are cryptographically immutable: UPDATE is blocked.');
+                END;
+                """
+            )
+            connection.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS trg_prevent_audit_delete
+                BEFORE DELETE ON audit_events
+                BEGIN
+                    SELECT RAISE(ABORT, 'Audit events are cryptographically immutable: DELETE is blocked.');
+                END;
+                """
+            )
+        else:
+            try:
+                connection.execute(
+                    """
+                    CREATE OR REPLACE RULE no_update_audit AS ON UPDATE TO audit_events DO INSTEAD NOTHING;
+                    """
+                )
+                connection.execute(
+                    """
+                    CREATE OR REPLACE RULE no_delete_audit AS ON DELETE TO audit_events DO INSTEAD NOTHING;
+                    """
+                )
+            except Exception:
+                pass
+
         # 4. Notice Versions Table
         connection.execute(
             f"""
@@ -538,21 +818,84 @@ def initialize_database():
                 version TEXT UNIQUE NOT NULL,
                 text TEXT NOT NULL,
                 hash TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
                 created_at TEXT NOT NULL
             )
             """
         )
 
+        if not pg:
+            notice_cols = [
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(notice_versions)").fetchall()
+            ]
+            if "is_active" not in notice_cols:
+                connection.execute(
+                    "ALTER TABLE notice_versions ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1"
+                )
+
+        # 5. Purposes Table (Database-driven configuration)
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS purposes (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL,
+                allowed_fields TEXT NOT NULL,
+                mock_data TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        if not pg:
+            purp_cols = [
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(purposes)").fetchall()
+            ]
+            if "name" not in purp_cols:
+                connection.execute(
+                    "ALTER TABLE purposes ADD COLUMN name TEXT NOT NULL DEFAULT ''"
+                )
+
+        # 6. Consumers Table (Database-driven downstream API clients)
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS consumers (
+                {id_primary},
+                consumer_id TEXT UNIQUE NOT NULL,
+                name TEXT NOT NULL,
+                api_key_hash TEXT NOT NULL,
+                allowed_purposes TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
+        if not pg:
+            cons_cols = [
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(consumers)").fetchall()
+            ]
+            if "consumer_id" not in cons_cols:
+                connection.execute(
+                    "ALTER TABLE consumers ADD COLUMN consumer_id TEXT NOT NULL DEFAULT ''"
+                )
+
         # Seed initial notice version if not present
         now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
         connection.execute(
             """
-            INSERT INTO notice_versions (version, text, hash, created_at)
-            VALUES (?, ?, ?, ?)
+            INSERT INTO notice_versions (version, text, hash, is_active, created_at)
+            VALUES (?, ?, ?, 1, ?)
             ON CONFLICT (version) DO NOTHING
             """,
             (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH, now_str),
         )
+
+        # Seed purposes and consumers
+        seed_purposes_and_consumers(connection)
 
         # Seed initial demo accounts
         seed_demo_users(connection)
@@ -566,6 +909,9 @@ def initialize_database():
         )
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_consumers_key_hash ON consumers(api_key_hash)"
         )
 
 
