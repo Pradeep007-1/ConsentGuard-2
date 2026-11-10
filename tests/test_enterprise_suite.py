@@ -757,3 +757,202 @@ def test_32_offline_foreign_keys_and_transaction_rollback(enterprise_app):
         assert user_row is None
 
 
+def test_33_bearer_token_signed_and_expiration(enterprise_app):
+    """Test 33: Cryptographically signed bearer tokens, tamper detection, expiration, and legacy support."""
+    client, _ = enterprise_app
+    import time
+    from itsdangerous import URLSafeTimedSerializer
+
+    # 1. Signup returns signed bearer token prefixed with cg_tok_
+    signup_res = client.post(
+        "/api/auth/signup",
+        json={"name": "Signed User", "email": "signed@test.local", "password": "Password123!"},
+    )
+    assert signup_res.status_code == 201
+    token = signup_res.get_json()["token"]
+    assert token.startswith("cg_tok_")
+
+    # 2. Authenticates properly with Bearer token
+    me_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+    assert me_res.status_code == 200
+    assert me_res.get_json()["authenticated"] is True
+    assert me_res.get_json()["user"]["name"] == "Signed User"
+
+    # 3. Tampered token signature is rejected with 401 INVALID_TOKEN
+    tampered_token = token + "corrupt"
+    bad_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {tampered_token}"})
+    assert bad_res.status_code == 401
+    assert bad_res.get_json()["reason_code"] == "INVALID_TOKEN"
+
+    # 4. Expired token returns 401 TOKEN_EXPIRED
+    with patch.dict(os.environ, {"TOKEN_MAX_AGE_SECONDS": "1"}):
+        time.sleep(2.1)
+        exp_res = client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"})
+        assert exp_res.status_code == 401
+        assert exp_res.get_json()["reason_code"] == "TOKEN_EXPIRED"
+
+    # 5. Transparent backwards compatibility for legacy raw user IDs
+    legacy_res = client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {signup_res.get_json()['user']['id']}"},
+    )
+    assert legacy_res.status_code == 200
+    assert legacy_res.get_json()["authenticated"] is True
+
+
+def test_34_admin_authorization_and_regular_user_blocking(enterprise_app):
+    """Test 34: Ordinary users are blocked from admin actions, while admin and demo accounts are authorized."""
+    client, _ = enterprise_app
+
+    # 1. Synthetic regular user (user-regular) is strictly blocked with 403 ADMIN_PRIVILEGES_REQUIRED
+    reg_login = client.post("/api/auth/demo-login", json={"user_id": "user-regular"})
+    assert reg_login.status_code == 200
+    reg_token = reg_login.get_json()["token"]
+
+    blocked_update = client.post(
+        "/api/notice/update",
+        headers={"Authorization": f"Bearer {reg_token}"},
+        json={"notice_version": "2.1"},
+    )
+    assert blocked_update.status_code == 403
+    assert blocked_update.get_json()["reason_code"] == "ADMIN_PRIVILEGES_REQUIRED"
+
+    # 2. Synthetic administrator (admin-user) succeeds
+    admin_login = client.post("/api/auth/demo-login", json={"user_id": "admin-user"})
+    assert admin_login.status_code == 200
+    admin_token = admin_login.get_json()["token"]
+
+    admin_update = client.post(
+        "/api/notice/update",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"notice_version": "2.1"},
+    )
+    assert admin_update.status_code == 200
+    assert admin_update.get_json()["notice_version"] == "2.1"
+
+    # 3. Interactive demo persona (demo-user) succeeds, preserving dashboard buttons
+    demo_login = client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    assert demo_login.status_code == 200
+    demo_token = demo_login.get_json()["token"]
+
+    demo_reset = client.post(
+        "/api/notice/reset",
+        headers={"Authorization": f"Bearer {demo_token}"},
+    )
+    assert demo_reset.status_code == 200
+    assert demo_reset.get_json()["notice_version"] == "1.0"
+
+
+def test_35_consumer_key_revocation_restoration_and_enforcement(enterprise_app):
+    """Test 35: Downstream API consumer revocation immediately blocks data sharing with 401 API_KEY_REVOKED."""
+    client, _ = enterprise_app
+    from database import DEFAULT_PARTNER_ALL_KEY, DEFAULT_PARTNER_LIMITED_KEY
+
+    # User grants consent for Analytics
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+
+    # Valid partner-limited request succeeds before revocation
+    pre_res = client.post(
+        "/api/share/request",
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "api_key": DEFAULT_PARTNER_LIMITED_KEY,
+        },
+    )
+    assert pre_res.status_code == 200
+    assert pre_res.get_json()["allowed"] is True
+
+    # Administrator revokes partner-limited key
+    admin_login = client.post("/api/auth/demo-login", json={"user_id": "admin-user"})
+    admin_token = admin_login.get_json()["token"]
+
+    revoke_res = client.post(
+        "/api/consumers/revoke",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"consumer_id": "partner-limited"},
+    )
+    assert revoke_res.status_code == 200
+    assert revoke_res.get_json()["is_active"] is False
+
+    # Attempt to use revoked API key is rejected with 401 API_KEY_REVOKED
+    blocked_res = client.post(
+        "/api/share/request",
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "api_key": DEFAULT_PARTNER_LIMITED_KEY,
+        },
+    )
+    assert blocked_res.status_code == 401
+    assert blocked_res.get_json()["reason_code"] == "API_KEY_REVOKED"
+
+    # Administrator restores partner-limited key
+    restore_res = client.post(
+        "/api/consumers/restore",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"consumer_id": "partner-limited"},
+    )
+    assert restore_res.status_code == 200
+    assert restore_res.get_json()["is_active"] is True
+
+    # Sharing works again with restored key
+    post_restore = client.post(
+        "/api/share/request",
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "api_key": DEFAULT_PARTNER_LIMITED_KEY,
+        },
+    )
+    assert post_restore.status_code == 200
+    assert post_restore.get_json()["allowed"] is True
+
+
+def test_36_notice_deterministic_sha256_and_conflict_handling(enterprise_app):
+    """Test 36: Notice versions deterministic SHA-256 hash, conflict prevention, and history preservation."""
+    client, _ = enterprise_app
+    import hashlib
+
+    # Admin auth
+    admin_login = client.post("/api/auth/demo-login", json={"user_id": "admin-user"})
+    admin_token = admin_login.get_json()["token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # Empty notice version rejected with 400
+    bad_req = client.post("/api/notice/update", headers=admin_headers, json={"notice_version": ""})
+    assert bad_req.status_code == 400
+    assert bad_req.get_json()["reason_code"] == "INVALID_NOTICE_VERSION"
+
+    # Update to v2.5 with explicit text
+    notice_text = "Custom v2.5 Privacy Notice: High-assurance data governance and itemized telemetry."
+    expected_hash = hashlib.sha256(notice_text.encode("utf-8")).hexdigest()
+
+    up_res = client.post(
+        "/api/notice/update",
+        headers=admin_headers,
+        json={"notice_version": "2.5", "notice_text": notice_text},
+    )
+    assert up_res.status_code == 200
+    assert up_res.get_json()["notice_hash"] == expected_hash
+
+    # Conflict: Attempt to register v2.5 with conflicting text returns 409 VERSION_EXISTS
+    conflict_res = client.post(
+        "/api/notice/update",
+        headers=admin_headers,
+        json={"notice_version": "2.5", "notice_text": "Conflicting different notice text"},
+    )
+    assert conflict_res.status_code == 409
+    assert conflict_res.get_json()["reason_code"] == "VERSION_EXISTS"
+
+    # Reset notice preserves v2.5 in historical notice list
+    client.post("/api/notice/reset", headers=admin_headers)
+    notices_res = client.get("/api/notices")
+    assert notices_res.status_code == 200
+    all_versions = [n["version"] for n in notices_res.get_json()]
+    assert "1.0" in all_versions
+    assert "2.5" in all_versions
+
+
+

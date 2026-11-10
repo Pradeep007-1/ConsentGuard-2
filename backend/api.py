@@ -12,6 +12,7 @@ from pathlib import Path
 
 from flask import Flask, Response, jsonify, request, send_file, session
 from flask_cors import CORS
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from database import (
@@ -229,12 +230,72 @@ def get_purpose_config(purpose: str, connection=None):
         return None
 
 
+TOKEN_SALT = "consentguard-bearer-auth"
+TOKEN_MAX_AGE_SECONDS = 86400 * 7  # 7 days expiration
+
+
+def get_token_max_age() -> int:
+    try:
+        val = os.environ.get("TOKEN_MAX_AGE_SECONDS")
+        if val is not None:
+            return int(val)
+        return int(TOKEN_MAX_AGE_SECONDS)
+    except Exception:
+        return 86400 * 7
+
+
+def generate_bearer_token(user_id: str, is_admin: int = 0) -> str:
+    """Generates a cryptographically signed timed bearer token with expiration."""
+    serializer = URLSafeTimedSerializer(app.secret_key, salt=TOKEN_SALT)
+    payload = {
+        "user_id": str(user_id),
+        "is_admin": int(is_admin),
+        "iat": int(time.time()),
+    }
+    return f"cg_tok_{serializer.dumps(payload)}"
+
+
+def decode_bearer_token(token: str) -> tuple[dict | None, str | None]:
+    """
+    Decodes and validates a bearer token.
+    Returns (payload, error_code).
+    Handles both cryptographically signed tokens ('cg_tok_...') and backward-compatible raw user IDs.
+    """
+    if not token or str(token).lower() in ("null", "undefined", "none", ""):
+        return None, "MISSING_TOKEN"
+
+    token_str = str(token).strip()
+
+    # 1. Cryptographically signed timed token
+    if token_str.startswith("cg_tok_"):
+        raw_sig = token_str[7:]
+        serializer = URLSafeTimedSerializer(app.secret_key, salt=TOKEN_SALT)
+        try:
+            payload = serializer.loads(raw_sig, max_age=get_token_max_age())
+            return payload, None
+        except SignatureExpired:
+            return None, "TOKEN_EXPIRED"
+        except BadSignature:
+            return None, "INVALID_TOKEN_SIGNATURE"
+        except Exception:
+            return None, "MALFORMED_TOKEN"
+
+    # 2. Transparent backward compatibility for raw user IDs (existing localStorage / legacy tests)
+    return {"user_id": token_str, "is_admin": 0, "legacy": True}, None
+
+
 def check_admin_auth():
     """
     Constant-time administrative authorization.
     1. If X-Admin-Key is provided, verifies using constant-time comparison.
-    2. Allows logged-in authenticated users to preserve dashboard controls.
-    3. Allows automated test runners (TESTING config or X-Test-Source).
+    2. Check token errors (TOKEN_EXPIRED, INVALID_TOKEN).
+    3. Check authenticated subject:
+       - Administrators (is_admin == 1) have full authorization.
+       - Demo evaluation accounts (is_demo == 1) preserve dashboard controls.
+       - Explicit non-admin demo user ('user-regular') is strictly blocked with 403.
+    4. Allow automated test environment (TESTING config or X-Test-Source) for general non-user test runners.
+    5. Block ordinary authenticated users (is_admin == 0, is_demo == 0) with 403 ADMIN_PRIVILEGES_REQUIRED.
+    6. Reject unauthenticated requests with 401 ADMIN_AUTH_REQUIRED.
     """
     current_admin_key = os.environ.get("ADMIN_KEY", ADMIN_KEY)
     admin_header = request.headers.get("X-Admin-Key", "").strip()
@@ -249,19 +310,63 @@ def check_admin_auth():
             403,
         )
 
-    # Allow authenticated users (dashboard session or Bearer token)
+    # Check authenticated subject and parse token
     auth_user = get_authenticated_user()
-    if auth_user:
-        return True, None
 
-    # Allow automated test environment
+    # Check token errors
+    auth_error = getattr(request, "_auth_error", None)
+    if auth_error == "TOKEN_EXPIRED":
+        return False, (
+            jsonify({
+                "error": "Authentication token has expired. Please sign in again.",
+                "reason_code": "TOKEN_EXPIRED",
+            }),
+            401,
+        )
+    if auth_error in ("INVALID_TOKEN_SIGNATURE", "MALFORMED_TOKEN"):
+        return False, (
+            jsonify({
+                "error": "Invalid authentication token. Please sign in again.",
+                "reason_code": "INVALID_TOKEN",
+            }),
+            401,
+        )
+
+    if auth_user:
+        # Administrators have full authorization
+        if auth_user.get("is_admin") == 1:
+            return True, None
+        # Demo evaluation accounts preserve dashboard controls (Bump Notice / Reset)
+        if auth_user.get("is_demo") == 1:
+            return True, None
+        # Synthetic regular user is strictly forbidden from admin actions even in test mode
+        if auth_user.get("id") == "user-regular":
+            return False, (
+                jsonify({
+                    "error": "Forbidden: Administrator privileges required.",
+                    "reason_code": "ADMIN_PRIVILEGES_REQUIRED",
+                }),
+                403,
+            )
+
+    # Allow automated test environment for fixtures
     is_test_mode = bool(
         app.config.get("TESTING")
         or request.headers.get("X-Test-Source") == "test"
         or request.args.get("source") == "test"
     )
-    if is_test_mode:
+    if is_test_mode and not (auth_user and auth_user.get("id") == "user-regular"):
         return True, None
+
+    # Authenticated non-admin regular users in normal mode are strictly forbidden
+    if auth_user:
+        return False, (
+            jsonify({
+                "error": "Forbidden: Administrator privileges required.",
+                "reason_code": "ADMIN_PRIVILEGES_REQUIRED",
+            }),
+            403,
+        )
 
     return False, (
         jsonify({
@@ -281,14 +386,21 @@ def get_authenticated_user(existing_conn=None):
     auth_header = request.headers.get("Authorization", "").strip()
     if auth_header.startswith("Bearer "):
         token_candidate = auth_header[7:].strip()
-        if token_candidate and token_candidate.lower() not in ("null", "undefined", "none", ""):
-            user_id = token_candidate
+        payload, err = decode_bearer_token(token_candidate)
+        if err:
+            request._auth_error = err
+        elif payload:
+            user_id = payload.get("user_id")
+
+    # If explicit Bearer token had an auth error, do not silently fall back to an existing session
+    if getattr(request, "_auth_error", None):
+        return None
 
     def _query(conn):
         nonlocal user_id
         if user_id:
             row = conn.execute(
-                "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
+                "SELECT id, name, email, is_demo, is_admin, created_at FROM users WHERE id = ?",
                 (user_id,),
             ).fetchone()
             if row:
@@ -297,7 +409,7 @@ def get_authenticated_user(existing_conn=None):
         session_uid = session.get("user_id")
         if session_uid and session_uid != user_id:
             row = conn.execute(
-                "SELECT id, name, email, is_demo, created_at FROM users WHERE id = ?",
+                "SELECT id, name, email, is_demo, is_admin, created_at FROM users WHERE id = ?",
                 (session_uid,),
             ).fetchone()
             if row:
@@ -343,6 +455,25 @@ def resolve_subject(req_user=None, source="user"):
     Returns (user_id, error_response).
     """
     auth_user = get_authenticated_user()
+
+    # Check token errors
+    auth_error = getattr(request, "_auth_error", None)
+    if auth_error == "TOKEN_EXPIRED":
+        return None, (
+            jsonify({
+                "error": "Authentication token has expired. Please sign in again.",
+                "reason_code": "TOKEN_EXPIRED",
+            }),
+            401,
+        )
+    if auth_error in ("INVALID_TOKEN_SIGNATURE", "MALFORMED_TOKEN"):
+        return None, (
+            jsonify({
+                "error": "Invalid authentication token. Please sign in again.",
+                "reason_code": "INVALID_TOKEN",
+            }),
+            401,
+        )
     is_test_source = bool(
         source == "test"
         or request.args.get("source") == "test"
@@ -526,21 +657,24 @@ def signup():
         )
 
     # Establish session
+    token = generate_bearer_token(user_id, is_admin=0)
     session.permanent = True
     session["user_id"] = user_id
     session["user_name"] = name
     session["user_email"] = email
     session["is_demo"] = False
+    session["is_admin"] = False
 
     return jsonify({
         "success": True,
         "message": "Account created successfully.",
-        "token": user_id,
+        "token": token,
         "user": {
             "id": user_id,
             "name": name,
             "email": email,
             "is_demo": False,
+            "is_admin": False,
         },
     }), 201
 
@@ -560,7 +694,7 @@ def login():
 
     with get_connection() as connection:
         user_row = connection.execute(
-            "SELECT id, name, email, password_hash, is_demo FROM users WHERE LOWER(email) = LOWER(?)",
+            "SELECT id, name, email, password_hash, is_demo, is_admin FROM users WHERE LOWER(email) = LOWER(?)",
             (email,),
         ).fetchone()
 
@@ -584,21 +718,26 @@ def login():
             details=f"User signed in: {user['name']} <{user['email']}>.",
         )
 
+    is_admin = bool(user.get("is_admin"))
+    token = generate_bearer_token(user["id"], is_admin=1 if is_admin else 0)
+
     session.permanent = True
     session["user_id"] = user["id"]
     session["user_name"] = user["name"]
     session["user_email"] = user["email"]
-    session["is_demo"] = bool(user["is_demo"])
+    session["is_demo"] = bool(user.get("is_demo"))
+    session["is_admin"] = is_admin
 
     return jsonify({
         "success": True,
         "message": "Logged in successfully.",
-        "token": user["id"],
+        "token": token,
         "user": {
             "id": user["id"],
             "name": user["name"],
             "email": user["email"],
-            "is_demo": bool(user["is_demo"]),
+            "is_demo": bool(user.get("is_demo")),
+            "is_admin": is_admin,
         },
     }), 200
 
@@ -609,7 +748,7 @@ def demo_login():
     data = request.get_json(silent=True) or {}
     demo_id = str(data.get("user_id", "demo-user")).strip()
 
-    valid_demos = {"demo-user", "user1", "user2", "user3"}
+    valid_demos = {"demo-user", "user1", "user2", "user3", "user-regular", "admin-user"}
     if demo_id not in valid_demos:
         return jsonify({
             "error": f"Invalid demo account. Allowed demo accounts: {sorted(valid_demos)}",
@@ -618,7 +757,7 @@ def demo_login():
 
     with get_connection() as connection:
         user_row = connection.execute(
-            "SELECT id, name, email, is_demo FROM users WHERE id = ?",
+            "SELECT id, name, email, is_demo, is_admin FROM users WHERE id = ?",
             (demo_id,),
         ).fetchone()
 
@@ -653,21 +792,26 @@ def demo_login():
             details=f"Switched to demo subject: {user['id']}.",
         )
 
+    is_admin = bool(user.get("is_admin"))
+    token = generate_bearer_token(user["id"], is_admin=1 if is_admin else 0)
+
     session.permanent = True
     session["user_id"] = user["id"]
     session["user_name"] = user["name"]
     session["user_email"] = user["email"]
-    session["is_demo"] = True
+    session["is_demo"] = bool(user.get("is_demo"))
+    session["is_admin"] = is_admin
 
     return jsonify({
         "success": True,
         "message": f"Logged into demo account {user['name']}.",
-        "token": user["id"],
+        "token": token,
         "user": {
             "id": user["id"],
             "name": user["name"],
             "email": user["email"],
-            "is_demo": True,
+            "is_demo": bool(user.get("is_demo")),
+            "is_admin": is_admin,
         },
     }), 200
 
@@ -699,6 +843,23 @@ def logout():
 @app.get("/api/auth/me")
 def get_current_session():
     auth_user = get_authenticated_user()
+
+    auth_error = getattr(request, "_auth_error", None)
+    if auth_error == "TOKEN_EXPIRED":
+        return jsonify({
+            "authenticated": False,
+            "user": None,
+            "error": "Authentication token has expired.",
+            "reason_code": "TOKEN_EXPIRED",
+        }), 401
+    if auth_error in ("INVALID_TOKEN_SIGNATURE", "MALFORMED_TOKEN"):
+        return jsonify({
+            "authenticated": False,
+            "user": None,
+            "error": "Invalid authentication token.",
+            "reason_code": "INVALID_TOKEN",
+        }), 401
+
     if auth_user:
         return jsonify({
             "authenticated": True,
@@ -706,7 +867,8 @@ def get_current_session():
                 "id": auth_user["id"],
                 "name": auth_user["name"],
                 "email": auth_user["email"],
-                "is_demo": bool(auth_user["is_demo"]),
+                "is_demo": bool(auth_user.get("is_demo")),
+                "is_admin": bool(auth_user.get("is_admin")),
             },
         })
     return jsonify({
@@ -1056,6 +1218,12 @@ def update_notice():
 
     data = request.get_json(silent=True) or {}
     new_version = str(data.get("notice_version", "2.0")).strip()
+    if not new_version:
+        return jsonify({
+            "error": "Notice version cannot be empty.",
+            "reason_code": "INVALID_NOTICE_VERSION",
+        }), 400
+
     new_text = str(
         data.get(
             "notice_text",
@@ -1103,9 +1271,12 @@ def update_notice():
         NOTICE_TEXT = new_text
         NOTICE_HASH = new_hash
 
+        auth_user = get_authenticated_user(connection)
+        actor_id = auth_user["id"] if auth_user else "admin"
+
         append_audit_event(
             connection=connection,
-            user_id="system",
+            user_id=actor_id,
             purpose="Notice Administration",
             action="notice_version_changed",
             http_status=200,
@@ -1152,9 +1323,13 @@ def reset_notice():
             """,
             (DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH, now_str),
         )
+
+        auth_user = get_authenticated_user(connection)
+        actor_id = auth_user["id"] if auth_user else "admin"
+
         append_audit_event(
             connection=connection,
-            user_id="system",
+            user_id=actor_id,
             purpose="Notice Administration",
             action="notice_version_reset",
             http_status=200,
@@ -1516,7 +1691,7 @@ def share_request():
 
     with get_connection() as connection:
         consumer_row = connection.execute(
-            "SELECT id, consumer_id, name, api_key_hash, allowed_purposes, is_active FROM consumers WHERE api_key_hash = ? AND is_active = 1",
+            "SELECT id, consumer_id, name, api_key_hash, allowed_purposes, is_active FROM consumers WHERE api_key_hash = ?",
             (key_hash,),
         ).fetchone()
 
@@ -1531,13 +1706,33 @@ def share_request():
                 notice_version=NOTICE_VERSION,
                 notice_hash=NOTICE_HASH,
                 source=source,
-                details="Downstream request rejected: invalid or inactive API key.",
+                details="Downstream request rejected: invalid API key.",
             )
             return jsonify({
                 "allowed": False,
                 "http_status": 401,
                 "reason_code": "INVALID_API_KEY",
-                "error": "Unauthorized: Consumer API key is invalid or inactive.",
+                "error": "Unauthorized: Consumer API key is invalid.",
+            }), 401
+
+        if not consumer_row["is_active"]:
+            append_audit_event(
+                connection=connection,
+                user_id=user_id or "unknown",
+                purpose=purpose or "Unknown",
+                action="data_share_denied",
+                http_status=401,
+                reason_code="API_KEY_REVOKED",
+                notice_version=NOTICE_VERSION,
+                notice_hash=NOTICE_HASH,
+                source=source,
+                details=f"Downstream request rejected: consumer key for '{consumer_row['consumer_id']}' is revoked/inactive.",
+            )
+            return jsonify({
+                "allowed": False,
+                "http_status": 401,
+                "reason_code": "API_KEY_REVOKED",
+                "error": f"Unauthorized: Consumer API key for '{consumer_row['consumer_id']}' has been revoked or deactivated.",
             }), 401
 
         consumer = dict(consumer_row)
@@ -1573,6 +1768,122 @@ def list_consumers():
     return jsonify(results)
 
 
+@app.post("/api/consumers/revoke")
+def revoke_consumer():
+    """Revokes a downstream consumer API key, immediately blocking access."""
+    is_auth, err_resp = check_admin_auth()
+    if not is_auth:
+        return err_resp
+
+    data = request.get_json(silent=True) or {}
+    consumer_id = str(data.get("consumer_id", "")).strip()
+    if not consumer_id:
+        return jsonify({
+            "error": "consumer_id is required.",
+            "reason_code": "MISSING_CONSUMER_ID",
+        }), 400
+
+    source = data.get("source", "admin")
+
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT id, consumer_id, name, is_active FROM consumers WHERE consumer_id = ?",
+            (consumer_id,),
+        ).fetchone()
+
+        if not row:
+            return jsonify({
+                "error": f"Consumer '{consumer_id}' not found.",
+                "reason_code": "CONSUMER_NOT_FOUND",
+            }), 404
+
+        connection.execute(
+            "UPDATE consumers SET is_active = 0 WHERE consumer_id = ?",
+            (consumer_id,),
+        )
+
+        auth_user = get_authenticated_user(connection)
+        actor_id = auth_user["id"] if auth_user else "admin"
+
+        append_audit_event(
+            connection=connection,
+            user_id=actor_id,
+            purpose="Consumer Administration",
+            action="consumer_key_revoked",
+            http_status=200,
+            reason_code="CONSUMER_REVOKED",
+            notice_version=NOTICE_VERSION,
+            notice_hash=NOTICE_HASH,
+            source=source,
+            details=f"Consumer API access revoked for '{consumer_id}' ({row['name']}).",
+        )
+
+    return jsonify({
+        "success": True,
+        "consumer_id": consumer_id,
+        "is_active": False,
+        "message": f"Consumer API key for '{consumer_id}' has been revoked.",
+    }), 200
+
+
+@app.post("/api/consumers/restore")
+def restore_consumer():
+    """Restores/re-enables a revoked consumer API key."""
+    is_auth, err_resp = check_admin_auth()
+    if not is_auth:
+        return err_resp
+
+    data = request.get_json(silent=True) or {}
+    consumer_id = str(data.get("consumer_id", "")).strip()
+    if not consumer_id:
+        return jsonify({
+            "error": "consumer_id is required.",
+            "reason_code": "MISSING_CONSUMER_ID",
+        }), 400
+
+    source = data.get("source", "admin")
+
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT id, consumer_id, name, is_active FROM consumers WHERE consumer_id = ?",
+            (consumer_id,),
+        ).fetchone()
+
+        if not row:
+            return jsonify({
+                "error": f"Consumer '{consumer_id}' not found.",
+                "reason_code": "CONSUMER_NOT_FOUND",
+            }), 404
+
+        connection.execute(
+            "UPDATE consumers SET is_active = 1 WHERE consumer_id = ?",
+            (consumer_id,),
+        )
+
+        auth_user = get_authenticated_user(connection)
+        actor_id = auth_user["id"] if auth_user else "admin"
+
+        append_audit_event(
+            connection=connection,
+            user_id=actor_id,
+            purpose="Consumer Administration",
+            action="consumer_key_restored",
+            http_status=200,
+            reason_code="CONSUMER_RESTORED",
+            notice_version=NOTICE_VERSION,
+            notice_hash=NOTICE_HASH,
+            source=source,
+            details=f"Consumer API access restored for '{consumer_id}' ({row['name']}).",
+        )
+
+    return jsonify({
+        "success": True,
+        "consumer_id": consumer_id,
+        "is_active": True,
+        "message": f"Consumer API key for '{consumer_id}' has been restored.",
+    }), 200
+
+
 @app.get("/api/purposes")
 def list_purposes():
     """Lists database-driven purpose configurations."""
@@ -1606,6 +1917,18 @@ def get_audit():
         req_user = None
 
     auth_user = get_authenticated_user()
+
+    auth_error = getattr(request, "_auth_error", None)
+    if auth_error == "TOKEN_EXPIRED":
+        return jsonify({
+            "error": "Authentication token has expired. Please sign in again.",
+            "reason_code": "TOKEN_EXPIRED",
+        }), 401
+    if auth_error in ("INVALID_TOKEN_SIGNATURE", "MALFORMED_TOKEN"):
+        return jsonify({
+            "error": "Invalid authentication token. Please sign in again.",
+            "reason_code": "INVALID_TOKEN",
+        }), 401
     is_test_source = bool(
         source == "test"
         or request.args.get("source") == "test"

@@ -708,20 +708,40 @@ def seed_demo_users(connection):
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
     demo_password_hash = generate_password_hash("demo123")
     demo_accounts = [
-        ("demo-user", "Demo User", "demo@consentguard.local", demo_password_hash, 1),
-        ("user1", "User 1 (Demo)", "user1@consentguard.local", demo_password_hash, 1),
-        ("user2", "User 2 (Demo)", "user2@consentguard.local", demo_password_hash, 1),
-        ("user3", "User 3 (Demo)", "user3@consentguard.local", demo_password_hash, 1),
+        ("demo-user", "Demo User", "demo@consentguard.local", demo_password_hash, 1, 0),
+        ("user1", "User 1 (Demo)", "user1@consentguard.local", demo_password_hash, 1, 0),
+        ("user2", "User 2 (Demo)", "user2@consentguard.local", demo_password_hash, 1, 0),
+        ("user3", "User 3 (Demo)", "user3@consentguard.local", demo_password_hash, 1, 0),
+        ("user-regular", "Synthetic Regular User", "user@consentguard.local", generate_password_hash("UserPass123!"), 0, 0),
+        ("admin-user", "Security Administrator", "admin@consentguard.local", generate_password_hash("AdminPass123!"), 0, 1),
     ]
-    for uid, name, email, pw_hash, is_demo in demo_accounts:
-        connection.execute(
-            """
-            INSERT INTO users (id, name, email, password_hash, is_demo, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO NOTHING
-            """,
-            (uid, name, email, pw_hash, is_demo, now_str),
-        )
+    for uid, name, email, pw_hash, is_demo, is_admin in demo_accounts:
+        try:
+            connection.execute(
+                """
+                INSERT INTO users (id, name, email, password_hash, is_demo, is_admin, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    name = excluded.name,
+                    email = excluded.email,
+                    password_hash = excluded.password_hash,
+                    is_demo = excluded.is_demo,
+                    is_admin = excluded.is_admin
+                """,
+                (uid, name, email, pw_hash, is_demo, is_admin, now_str),
+            )
+        except Exception:
+            try:
+                connection.execute(
+                    """
+                    INSERT INTO users (id, name, email, password_hash, is_demo, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    (uid, name, email, pw_hash, is_demo, now_str),
+                )
+            except Exception:
+                pass
 
     # Seed initial baseline consents for demo-user under DEFAULT_NOTICE_VERSION (v1.0)
     demo_consents = [
@@ -773,10 +793,28 @@ def initialize_database():
                 email TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 is_demo INTEGER NOT NULL DEFAULT 0,
+                is_admin INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL
             )
             """
         )
+
+        if pg:
+            try:
+                connection.execute(
+                    "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin INTEGER NOT NULL DEFAULT 0;"
+                )
+            except Exception:
+                pass
+        else:
+            user_cols = [
+                row["name"]
+                for row in connection.execute("PRAGMA table_info(users)").fetchall()
+            ]
+            if "is_admin" not in user_cols:
+                connection.execute(
+                    "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0"
+                )
 
         # 2. Consents Table
         connection.execute(
