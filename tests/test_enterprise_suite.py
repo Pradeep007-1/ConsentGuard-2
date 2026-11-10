@@ -695,3 +695,65 @@ def test_30_consent_history_and_access_logs_endpoints(enterprise_app):
     assert len(logs) >= 1
     assert logs[0]["action"] == "data_access_allowed"
 
+
+def test_31_offline_local_mode_configuration(enterprise_app):
+    """Test 31: LOCAL_MODE=1 forces SQLite, disables cloud connection, and runs 100% offline."""
+    from database import is_local_mode, get_database_url, is_postgres
+    client, _ = enterprise_app
+
+    # Test under simulated cloud DATABASE_URL but LOCAL_MODE=1
+    fake_cloud_url = "postgresql://user:pass@ep-fake.neon.tech/neondb?sslmode=require"
+    with patch.dict(os.environ, {"LOCAL_MODE": "1", "DATABASE_URL": fake_cloud_url}):
+        assert is_local_mode() is True
+        # Must block cloud database URL completely
+        assert get_database_url() == ""
+        assert is_postgres() is False
+
+        # Health endpoint reports local_mode and offline_ready
+        health_res = client.get("/api/health")
+        assert health_res.status_code == 200
+        health_data = health_res.get_json()
+        assert health_data["local_mode"] is True
+        assert health_data["database_type"] == "sqlite"
+        assert health_data["offline_ready"] is True
+
+        # Complete offline consent cycle
+        client.post("/api/auth/signup", json={"name": "Offline User", "email": "offline@hackathon.test", "password": "Password123!"})
+        grant_res = client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+        assert grant_res.status_code == 201
+
+        pep_res = client.post("/api/data-access", json={"purpose": "Analytics"})
+        assert pep_res.status_code == 200
+        assert pep_res.get_json()["allowed"] is True
+
+
+def test_32_offline_foreign_keys_and_transaction_rollback(enterprise_app):
+    """Test 32: SQLite transaction safely rolls back on exceptions without corrupting data."""
+    from database import get_connection
+
+    with get_connection() as conn:
+        fk_check = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        assert fk_check == 1
+
+        initial_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    # Attempt a transaction that raises an unhandled error
+    try:
+        with get_connection() as conn:
+            conn.execute(
+                "INSERT INTO users (id, name, email, password_hash, is_demo, created_at) VALUES (?, ?, ?, ?, 0, ?)",
+                ("temp_rollback_user", "Temp", "temp_roll@test.local", "hash", "2026-11-10T00:00:00Z"),
+            )
+            # Deliberately raise exception before commit
+            raise RuntimeError("Simulated transaction crash")
+    except RuntimeError:
+        pass
+
+    # Verify safe rollback occurred
+    with get_connection() as conn:
+        final_count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        assert final_count == initial_count
+        user_row = conn.execute("SELECT id FROM users WHERE id = 'temp_rollback_user'").fetchone()
+        assert user_row is None
+
+

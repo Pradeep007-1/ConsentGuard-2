@@ -16,8 +16,25 @@ DATABASE_PATH = Path(__file__).parent / "consentguard.db"
 _sqlite_audit_lock = threading.Lock()
 
 
+def is_local_mode() -> bool:
+    """
+    Returns True if explicitly running in local/offline mode.
+    Forces ConsentGuard to operate completely disconnected from cloud services,
+    ensuring 100% reliability during offline hackathon demonstrations.
+    """
+    val = (os.environ.get("LOCAL_MODE") or os.environ.get("OFFLINE_MODE") or "").strip().lower()
+    return val in ("1", "true", "yes", "on")
+
+
 def get_database_url():
-    """Returns database URL from environment variables, supporting Neon, Vercel Postgres, Supabase."""
+    """
+    Returns database URL from environment variables, supporting Neon, Vercel Postgres, Supabase.
+    If LOCAL_MODE=1 or OFFLINE_MODE=1, strictly returns an empty string to prevent any accidental
+    cloud database network calls during offline demonstrations.
+    """
+    if is_local_mode():
+        return ""
+
     url = (
         os.environ.get("DATABASE_URL")
         or os.environ.get("POSTGRES_URL")
@@ -50,6 +67,8 @@ DEFAULT_NOTICE_HASH = hashlib.sha256(DEFAULT_NOTICE_TEXT.encode("utf-8")).hexdig
 
 
 def is_postgres():
+    if is_local_mode():
+        return False
     url = get_database_url()
     return url.startswith("postgres://") or url.startswith("postgresql://")
 
@@ -167,6 +186,7 @@ def get_connection():
         connection.execute("PRAGMA journal_mode = WAL;")
         connection.execute("PRAGMA synchronous = NORMAL;")
         connection.execute("PRAGMA busy_timeout = 5000;")
+        connection.execute("PRAGMA foreign_keys = ON;")
         try:
             yield connection
             connection.commit()

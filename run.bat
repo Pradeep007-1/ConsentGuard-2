@@ -1,5 +1,7 @@
 @echo off
 setlocal enabledelayedexpansion
+set LOCAL_MODE=1
+set OFFLINE_MODE=1
 
 echo ============================================================
 echo   CONSENTGUARD: ENTERPRISE PURPOSE-BASED CONSENT ENGINE

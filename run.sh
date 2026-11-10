@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -e
+export LOCAL_MODE=1
+export OFFLINE_MODE=1
 
 echo "============================================================"
 echo "  CONSENTGUARD: ENTERPRISE PURPOSE-BASED CONSENT ENGINE"

@@ -26,6 +26,7 @@ from database import (
     get_data_access_request_logs,
     hash_api_key,
     initialize_database,
+    is_local_mode,
     verify_audit_chain,
 )
 
@@ -33,12 +34,17 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 
 app = Flask(__name__)
 # Configure secret key for session management
+is_offline = is_local_mode()
 app.secret_key = os.environ.get(
-    "SECRET_KEY", "consentguard-production-secret-key-change-in-production"
+    "SECRET_KEY",
+    "cg-offline-local-session-secret-key" if is_offline else "consentguard-production-secret-key-change-in-production",
 )
 
 # Administrative secret key for secure infrastructure operations
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "cg_admin_secret_key_hackathon")
+ADMIN_KEY = os.environ.get(
+    "ADMIN_KEY",
+    "cg_admin_offline_key_2026" if is_offline else "cg_admin_secret_key_hackathon",
+)
 
 # Secure cookie configuration
 is_production = bool(os.environ.get("VERCEL") or os.environ.get("PRODUCTION"))
@@ -432,8 +438,13 @@ def health():
             "database": "connected",
             "database_type": db_type,
             "is_persistent": is_persistent,
+            "local_mode": is_local_mode(),
+            "offline_ready": True,
         }
-        if not is_persistent and is_production:
+        if is_local_mode():
+            resp_data["environment"] = "local_offline"
+            resp_data["message"] = "ConsentGuard is operating 100% offline with local SQLite engine. Cloud network access disabled."
+        elif not is_persistent and is_production:
             resp_data["storage_warning"] = (
                 "Running on ephemeral SQLite (/tmp) in production. Data will not persist across serverless instances. "
                 "Configure DATABASE_URL with a persistent PostgreSQL instance (e.g. Neon.tech)."
