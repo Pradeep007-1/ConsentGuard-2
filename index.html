@@ -2801,37 +2801,41 @@ function renderPurposes() {
   });
 
   // Calculate actual counts
-  document.getElementById('dash-active-count').textContent = activeCount + ' / 3';
-  document.getElementById('dash-revoked-count').textContent = revokedCount;
-
   let allowedCount = 0;
   let blockedCount = 0;
   const accessEvents = [];
 
   state.audit.forEach(evt => {
-    if (evt.action === 'data_access_allowed') {
+    if (evt.action === 'data_access_allowed' || evt.action === 'data_share_allowed') {
       allowedCount++;
       accessEvents.push(evt);
     }
-    if (evt.action === 'data_access_denied') {
+    if (evt.action === 'data_access_denied' || evt.action === 'data_share_denied') {
       blockedCount++;
       accessEvents.push(evt);
     }
   });
 
-  const totalAccess = allowedCount + blockedCount;
+  const displayActive = (state.stats && typeof state.stats.active_consents === 'number') ? state.stats.active_consents : activeCount;
+  const displayRevoked = (state.stats && typeof state.stats.withdrawn_consents === 'number') ? state.stats.withdrawn_consents : revokedCount;
+  const displayAllowed = (state.stats && typeof state.stats.allowed_requests === 'number') ? state.stats.allowed_requests : allowedCount;
+  const displayBlocked = (state.stats && typeof state.stats.blocked_requests === 'number') ? state.stats.blocked_requests : blockedCount;
+  const totalAccess = (state.stats && typeof state.stats.total_requests === 'number') ? state.stats.total_requests : (displayAllowed + displayBlocked);
+
+  document.getElementById('dash-active-count').textContent = displayActive + ' / 3';
+  document.getElementById('dash-revoked-count').textContent = displayRevoked;
   document.getElementById('dash-total-requests').textContent = totalAccess;
-  document.getElementById('dash-allowed-count').textContent = allowedCount;
-  document.getElementById('dash-blocked-count').textContent = blockedCount;
+  document.getElementById('dash-allowed-count').textContent = displayAllowed;
+  document.getElementById('dash-blocked-count').textContent = displayBlocked;
 
   // Render Analytics Ratio Progress Bar
   const totalBar = document.getElementById('dash-access-total');
   if (totalBar) totalBar.textContent = 'Total: ' + totalAccess;
-  document.getElementById('dash-viz-allowed-num').textContent = allowedCount;
-  document.getElementById('dash-viz-blocked-num').textContent = blockedCount;
+  document.getElementById('dash-viz-allowed-num').textContent = displayAllowed;
+  document.getElementById('dash-viz-blocked-num').textContent = displayBlocked;
 
   if (totalAccess > 0) {
-    const allowedPct = Math.round((allowedCount / totalAccess) * 100);
+    const allowedPct = Math.round((displayAllowed / totalAccess) * 100);
     const blockedPct = 100 - allowedPct;
     document.getElementById('dash-bar-allowed').style.width = allowedPct + '%';
     document.getElementById('dash-bar-blocked').style.width = blockedPct + '%';
@@ -2855,7 +2859,7 @@ function renderPurposes() {
       recentTableBody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:24px; color:var(--text-muted)">No downstream access requests evaluated yet. Launch the Data Access Simulator above to test an evaluation.</td></tr>';
     } else {
       recentTableBody.innerHTML = accessEvents.slice(0, 5).map(evt => {
-        const isAllowed = evt.action === 'data_access_allowed';
+        const isAllowed = evt.action === 'data_access_allowed' || evt.action === 'data_share_allowed';
         const badgeCls = isAllowed ? 'allow' : 'deny';
         const badgeText = isAllowed ? 'ALLOW' : 'BLOCK';
         const httpStatus = evt.http_status ? `HTTP ${evt.http_status}` : (isAllowed ? 'HTTP 200' : 'HTTP 403');
@@ -3125,11 +3129,13 @@ async function refreshAll(retryCount = 0, options = {}) {
   try {
     const fetches = [
       requestJson('/consents'),
-      requestJson('/audit?limit=100')
+      requestJson('/audit?limit=100'),
+      requestJson('/stats').catch(() => ({ data: null }))
     ];
 
     // Only fetch notice definitions if not yet cached or explicitly requested
-    if (!state.notice || options.includeNotices) {
+    const needsNotices = !state.notice || options.includeNotices;
+    if (needsNotices) {
       fetches.push(requestJson('/notice'));
       fetches.push(requestJson('/notices'));
     }
@@ -3137,9 +3143,13 @@ async function refreshAll(retryCount = 0, options = {}) {
     const results = await Promise.all(fetches);
     const consentsRes = results[0];
     const auditRes = results[1];
+    const statsRes = results[2];
 
     state.consents = consentsRes.data || [];
     state.audit = auditRes.data || [];
+    if (statsRes && statsRes.data) {
+      state.stats = statsRes.data;
+    }
 
     if (state.consents.length > 0 && state.consents[0].active_notice_version && !state.notice) {
       state.notice = {
@@ -3149,9 +3159,9 @@ async function refreshAll(retryCount = 0, options = {}) {
       updateNoticeDom();
     }
 
-    if (results.length > 2) {
-      const noticeRes = results[2];
-      const noticesRes = results[3];
+    if (needsNotices && results.length >= 5) {
+      const noticeRes = results[3];
+      const noticesRes = results[4];
       if (noticeRes && noticeRes.data) {
         state.notice = noticeRes.data;
         updateNoticeDom();

@@ -619,3 +619,79 @@ def test_28_demo_reset_preserves_immutable_audit_history(enterprise_app):
 
     # Audits were NOT deleted, reset event was added
     assert audit_count_after > audit_count_before
+
+
+def test_29_dashboard_stats_endpoint(enterprise_app):
+    """Test 29: /api/stats computes exact real-time database metrics across grant, access, and withdrawal."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Marcus Stats", "email": "marcus@stats.test", "password": "Password123!"})
+
+    # Initially zero active consents
+    r0 = client.get("/api/stats")
+    assert r0.status_code == 200
+    d0 = r0.get_json()
+    assert d0["active_consents"] == 0
+    assert d0["withdrawn_consents"] == 0
+    assert d0["allowed_requests"] == 0
+    assert d0["blocked_requests"] == 0
+
+    # 1. Grant Analytics consent
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    r1 = client.get("/api/stats")
+    d1 = r1.get_json()
+    assert d1["active_consents"] == 1
+    assert d1["withdrawn_consents"] == 0
+
+    # 2. Access Analytics data -> Allowed
+    access_r = client.post("/api/data-access", json={"purpose": "Analytics"})
+    assert access_r.status_code == 200
+    r2 = client.get("/api/stats")
+    d2 = r2.get_json()
+    assert d2["allowed_requests"] == 1
+    assert d2["blocked_requests"] == 0
+
+    # 3. Withdraw Analytics consent -> Withdrawn
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    r3 = client.get("/api/stats")
+    d3 = r3.get_json()
+    assert d3["active_consents"] == 0
+    assert d3["withdrawn_consents"] == 1
+
+    # 4. Access Analytics data -> Denied / Blocked
+    access_denied_r = client.post("/api/data-access", json={"purpose": "Analytics"})
+    assert access_denied_r.status_code == 403
+    r4 = client.get("/api/stats")
+    d4 = r4.get_json()
+    assert d4["allowed_requests"] == 1
+    assert d4["blocked_requests"] == 1
+    assert d4["total_requests"] == 2
+
+
+def test_30_consent_history_and_access_logs_endpoints(enterprise_app):
+    """Test 30: /api/consents/history, /api/access-logs and singular /api/consent aliases."""
+    client, _ = enterprise_app
+    client.post("/api/auth/signup", json={"name": "Elena History", "email": "elena@history.test", "password": "Password123!"})
+    client.post("/api/consent", json={"purpose": "Analytics", "action": "grant"})
+    client.post("/api/data-access", json={"purpose": "Analytics"})
+
+    # Singular /api/consent endpoint
+    get_res = client.get("/api/consent")
+    assert get_res.status_code == 200
+    assert len(get_res.get_json()) >= 1
+
+    # /api/consents/history endpoint
+    hist_res = client.get("/api/consents/history")
+    assert hist_res.status_code == 200
+    history = hist_res.get_json()
+    assert isinstance(history, list)
+    assert len(history) >= 1
+    assert any(h["purpose"] == "Analytics" for h in history)
+
+    # /api/access-logs endpoint
+    logs_res = client.get("/api/access-logs")
+    assert logs_res.status_code == 200
+    logs = logs_res.get_json()
+    assert isinstance(logs, list)
+    assert len(logs) >= 1
+    assert logs[0]["action"] == "data_access_allowed"
+

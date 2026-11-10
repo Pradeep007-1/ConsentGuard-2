@@ -19,8 +19,11 @@ from database import (
     DEFAULT_NOTICE_TEXT,
     DEFAULT_NOTICE_VERSION,
     append_audit_event,
+    compute_dashboard_stats,
     get_active_notice_from_db,
     get_connection,
+    get_consent_history,
+    get_data_access_request_logs,
     hash_api_key,
     initialize_database,
     verify_audit_chain,
@@ -1162,7 +1165,8 @@ def reset_notice():
 # ============================================================================
 # Consent Management & Data Access (PEP)
 # ============================================================================
-@app.get("/api/consents")
+@app.route("/api/consent", methods=["GET"])
+@app.route("/api/consents", methods=["GET"])
 def get_consents():
     source = request.args.get("source", "user")
     req_user = request.args.get("user_id")
@@ -1195,7 +1199,83 @@ def get_consents():
     return jsonify(results)
 
 
-@app.post("/api/consents")
+@app.route("/api/consent/history", methods=["GET"])
+@app.route("/api/consents/history", methods=["GET"])
+def get_consents_history():
+    """Returns chronological consent lifecycle events (grant, withdraw, deny, re-consent) for user."""
+    source = request.args.get("source", "user")
+    req_user = request.args.get("user_id")
+    user_id, err = resolve_subject(req_user=req_user, source=source)
+    if err:
+        return err
+    limit = request.args.get("limit", "100")
+    try:
+        limit_val = int(limit)
+    except Exception:
+        limit_val = 100
+    with get_connection() as connection:
+        history = get_consent_history(connection, user_id=user_id, limit=limit_val)
+    return jsonify(history), 200
+
+
+@app.route("/api/stats", methods=["GET"])
+@app.route("/api/consents/stats", methods=["GET"])
+def get_stats():
+    """
+    Returns real-time server-side verified statistics for dashboard cards:
+    - Active consents
+    - Withdrawn consents
+    - Re-consent required
+    - Allowed data access requests (simulator + downstream partner shares)
+    - Blocked data access requests (simulator + downstream partner shares)
+    - Total requests & audit events
+    """
+    source = request.args.get("source", "user")
+    req_user = request.args.get("user_id")
+
+    auth_user = get_authenticated_user()
+    if auth_user:
+        user_id = auth_user["id"]
+    elif req_user:
+        user_id, err = resolve_subject(req_user=req_user, source=source)
+        if err:
+            user_id = "demo-user"
+    else:
+        user_id = "demo-user"
+
+    with get_connection() as connection:
+        stats = compute_dashboard_stats(connection, user_id=user_id)
+        stats["user_id"] = user_id
+        stats["purposes"] = ["Analytics", "Marketing", "Service Improvement"]
+
+    return jsonify(stats), 200
+
+
+@app.route("/api/access-logs", methods=["GET"])
+@app.route("/api/data-access/logs", methods=["GET"])
+def get_access_logs():
+    """Returns data access request logs (allowed and blocked evaluations)."""
+    source = request.args.get("source", "user")
+    req_user = request.args.get("user_id")
+    auth_user = get_authenticated_user()
+    if auth_user:
+        user_id = auth_user["id"]
+    elif req_user:
+        user_id, _ = resolve_subject(req_user=req_user, source=source)
+    else:
+        user_id = None
+    limit = request.args.get("limit", "100")
+    try:
+        limit_val = int(limit)
+    except Exception:
+        limit_val = 100
+    with get_connection() as connection:
+        logs = get_data_access_request_logs(connection, user_id=user_id, limit=limit_val)
+    return jsonify(logs), 200
+
+
+@app.route("/api/consent", methods=["POST"])
+@app.route("/api/consents", methods=["POST"])
 def record_consent():
     load_active_notice()
     data = request.get_json(silent=True) or {}

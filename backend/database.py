@@ -983,6 +983,164 @@ def initialize_database():
         connection.execute(
             "CREATE INDEX IF NOT EXISTS idx_consumers_key_hash ON consumers(api_key_hash)"
         )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_action_created ON audit_events(action, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_user_created ON audit_events(user_id, created_at)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_notice_version_active ON notice_versions(is_active, version)"
+        )
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_consents_user_purpose ON consents(user_id, purpose)"
+        )
+
+
+def get_consent_history(connection, user_id=None, limit=100):
+    """
+    Retrieves chronological consent lifecycle events (grant, withdraw, deny, re-consent)
+    with cryptographic audit verification metadata.
+    """
+    consent_actions = (
+        "grant",
+        "withdraw",
+        "deny",
+        "consent_rejected_stale",
+        "CONSENT_RECORDED",
+        "CONSENT_GRANTED",
+        "CONSENT_WITHDRAWN",
+        "CONSENT_DENIED",
+    )
+    placeholders = ",".join(["?"] * len(consent_actions))
+    query = f"SELECT * FROM audit_events WHERE (action IN ({placeholders}) OR reason_code IN ({placeholders}))"
+    params = list(consent_actions) + list(consent_actions)
+    if user_id:
+        query += " AND user_id = ?"
+        params.append(str(user_id))
+    query += " ORDER BY id DESC"
+    if limit and int(limit) > 0:
+        query += f" LIMIT {int(limit)}"
+    rows = connection.execute(query, tuple(params)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_data_access_request_logs(connection, user_id=None, limit=100):
+    """
+    Retrieves data access request evaluation events (allowed and denied, internal and downstream share)
+    from the immutable audit trail.
+    """
+    access_actions = (
+        "data_access_allowed",
+        "data_access_denied",
+        "data_share_allowed",
+        "data_share_denied",
+    )
+    placeholders = ",".join(["?"] * len(access_actions))
+    query = f"SELECT * FROM audit_events WHERE action IN ({placeholders})"
+    params = list(access_actions)
+    if user_id:
+        query += " AND user_id = ?"
+        params.append(str(user_id))
+    query += " ORDER BY id DESC"
+    if limit and int(limit) > 0:
+        query += f" LIMIT {int(limit)}"
+    rows = connection.execute(query, tuple(params)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def compute_dashboard_stats(connection, user_id=None):
+    """
+    Computes exact real-time aggregate metrics directly from database tables:
+    - active_consents: granted=1 and matching active notice version/hash.
+    - withdrawn_consents: granted=0 (withdrawn or denied).
+    - reconsent_required: granted=1 but notice version or hash is outdated.
+    - allowed_requests: data_access_allowed + data_share_allowed.
+    - blocked_requests: data_access_denied + data_share_denied.
+    - total_requests: allowed + blocked.
+    - total_audit_events: total audit events in database.
+    """
+    active_ver, _, active_h = get_active_notice_from_db()
+
+    # Consents statistics
+    if user_id:
+        consent_rows = connection.execute(
+            "SELECT purpose, granted, notice_version, notice_hash, last_action FROM consents WHERE user_id = ?",
+            (str(user_id),),
+        ).fetchall()
+    else:
+        consent_rows = connection.execute(
+            "SELECT purpose, granted, notice_version, notice_hash, last_action FROM consents"
+        ).fetchall()
+
+    active_consents = 0
+    withdrawn_consents = 0
+    reconsent_required = 0
+
+    for r in consent_rows:
+        g = r["granted"]
+        nv = r["notice_version"]
+        nh = r["notice_hash"] or ""
+        if g == 1:
+            if nv == active_ver and (not nh or not active_h or nh == active_h):
+                active_consents += 1
+            else:
+                reconsent_required += 1
+        else:
+            withdrawn_consents += 1
+
+    # Access request counts
+    if user_id:
+        allowed_row = connection.execute(
+            """
+            SELECT COUNT(*) as c FROM audit_events
+            WHERE user_id = ? AND action IN ('data_access_allowed', 'data_share_allowed')
+            """,
+            (str(user_id),),
+        ).fetchone()
+        blocked_row = connection.execute(
+            """
+            SELECT COUNT(*) as c FROM audit_events
+            WHERE user_id = ? AND action IN ('data_access_denied', 'data_share_denied')
+            """,
+            (str(user_id),),
+        ).fetchone()
+        total_audit_row = connection.execute(
+            "SELECT COUNT(*) as c FROM audit_events WHERE user_id = ?",
+            (str(user_id),),
+        ).fetchone()
+    else:
+        allowed_row = connection.execute(
+            """
+            SELECT COUNT(*) as c FROM audit_events
+            WHERE action IN ('data_access_allowed', 'data_share_allowed')
+            """
+        ).fetchone()
+        blocked_row = connection.execute(
+            """
+            SELECT COUNT(*) as c FROM audit_events
+            WHERE action IN ('data_access_denied', 'data_share_denied')
+            """
+        ).fetchone()
+        total_audit_row = connection.execute(
+            "SELECT COUNT(*) as c FROM audit_events"
+        ).fetchone()
+
+    allowed_requests = int(allowed_row["c"]) if allowed_row and allowed_row["c"] is not None else 0
+    blocked_requests = int(blocked_row["c"]) if blocked_row and blocked_row["c"] is not None else 0
+    total_audit_events = int(total_audit_row["c"]) if total_audit_row and total_audit_row["c"] is not None else 0
+
+    return {
+        "active_consents": active_consents,
+        "withdrawn_consents": withdrawn_consents,
+        "reconsent_required": reconsent_required,
+        "allowed_requests": allowed_requests,
+        "blocked_requests": blocked_requests,
+        "total_requests": allowed_requests + blocked_requests,
+        "total_audit_events": total_audit_events,
+        "active_notice_version": active_ver,
+        "active_notice_hash": active_h,
+    }
 
 
 if __name__ == "__main__":

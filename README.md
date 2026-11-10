@@ -153,17 +153,22 @@ Evaluates downstream consumer requests against user consent, notice validity, an
   7. Valid request $\rightarrow$ `HTTP 200 OK` (Releases permitted fields only)
 
 ### 2. Consent Management
-* `GET /api/consents`: Returns itemized consent records for authenticated user.
-* `POST /api/consents`: Records consent grant, withdrawal, or denial.
+* `GET /api/consents` (alias `/api/consent`): Returns itemized consent records for authenticated user.
+* `POST /api/consents` (alias `/api/consent`): Records consent grant, withdrawal, or denial.
   * Rejects outdated notice hashes with `409 STALE_NOTICE`.
   * Withdrawal is idempotent: repeating withdrawal returns `200 CONSENT_ALREADY_WITHDRAWN` without duplicate audit rows.
+* `GET /api/consents/history` (alias `/api/consent/history`): Returns chronological consent lifecycle events (grant, withdraw, deny, re-consent) for user.
 
-### 3. Privacy Notices
+### 3. Real-Time Statistics & Access Logs
+* `GET /api/stats` (alias `/api/consents/stats`): Returns server-side verified real-time metrics (active consents, withdrawn consents, re-consent requirements, allowed requests, blocked requests).
+* `GET /api/access-logs` (alias `/api/data-access/logs`): Returns data access evaluation logs (allowed and blocked events).
+
+### 4. Privacy Notices
 * `GET /api/notice`: Returns active notice version, text, and SHA-256 hash.
 * `POST /api/notice/update`: Atomically publishes notice change; rejects conflicts with `409 VERSION_EXISTS`.
 * `POST /api/notice/reset`: Resets active notice to v1.0 without destroying historical versions.
 
-### 4. Audit & Verification
+### 5. Audit & Verification
 * `GET /api/audit`: Returns user-scoped audit ledger.
 * `GET /api/audit/verify`: Scans and cryptographically verifies the SHA-256 Merkle DAG ledger.
 * `GET /api/audit/export?format=csv|json`: Exports audit trail for compliance inspection.
@@ -172,10 +177,10 @@ Evaluates downstream consumer requests against user consent, notice validity, an
 
 ## 🧪 Comprehensive Automated Test Suite
 
-ConsentGuard includes **84 automated tests** with 100% test passage:
+ConsentGuard includes **86 automated tests** with 100% test passage:
 
 ```powershell
-# Run the complete test suite (84 tests):
+# Run the complete test suite (86 tests):
 python -m pytest tests/ -v
 python backend/test_api.py -v
 
