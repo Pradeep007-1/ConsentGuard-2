@@ -2817,8 +2817,8 @@ function renderPurposes() {
     }
   });
 
-  const displayActive = (state.stats && typeof state.stats.active_consents === 'number') ? state.stats.active_consents : activeCount;
-  const displayRevoked = (state.stats && typeof state.stats.withdrawn_consents === 'number') ? state.stats.withdrawn_consents : revokedCount;
+  const displayActive = activeCount;
+  const displayRevoked = revokedCount;
   const displayAllowed = (state.stats && typeof state.stats.allowed_requests === 'number') ? state.stats.allowed_requests : allowedCount;
   const displayBlocked = (state.stats && typeof state.stats.blocked_requests === 'number') ? state.stats.blocked_requests : blockedCount;
   const totalAccess = (state.stats && typeof state.stats.total_requests === 'number') ? state.stats.total_requests : (displayAllowed + displayBlocked);
@@ -3128,10 +3128,12 @@ async function refreshAll(retryCount = 0, options = {}) {
   checkBackendHealth().catch(() => {});
 
   try {
+    const activeUid = state.currentUserObj ? state.currentUserObj.id : (state.currentUser || '');
+    const userQuery = activeUid ? ('?user_id=' + encodeURIComponent(activeUid)) : '';
     const fetches = [
-      requestJson('/consents'),
-      requestJson('/audit?limit=100'),
-      requestJson('/stats').catch(() => ({ data: null })),
+      requestJson('/consents' + userQuery),
+      requestJson('/audit?limit=100' + (userQuery ? ('&user_id=' + encodeURIComponent(activeUid)) : '')),
+      requestJson('/stats' + userQuery).catch(() => ({ data: null })),
       requestJson('/notice').catch(() => ({ data: null }))
     ];
 
@@ -3247,11 +3249,17 @@ async function setConsent(purpose, action) {
       }
       showToast(`${purpose} consent ${action}ed successfully.`);
 
-      // Sync audit trail in background without blocking
-      requestJson('/audit?limit=100').then(res => {
+      // Sync audit trail and stats in background without blocking
+      const statsQuery = currentUid ? ('?user_id=' + encodeURIComponent(currentUid)) : '';
+      requestJson('/audit?limit=100' + (currentUid ? ('&user_id=' + encodeURIComponent(currentUid)) : '')).then(res => {
         if (res.data) {
           state.audit = res.data;
           renderAudit();
+        }
+      }).catch(() => {});
+      requestJson('/stats' + statsQuery).then(res => {
+        if (res.data) {
+          state.stats = res.data;
         }
       }).catch(() => {});
     } else {

@@ -1800,10 +1800,8 @@ def get_stats():
     auth_user = get_authenticated_user()
     if auth_user:
         user_id = auth_user["id"]
-    elif req_user:
-        user_id, err = resolve_subject(req_user=req_user, source=source)
-        if err:
-            user_id = "demo-user"
+    elif req_user and str(req_user).strip() not in ("null", "undefined", "None", ""):
+        user_id = str(req_user).strip()
     else:
         user_id = "demo-user"
 

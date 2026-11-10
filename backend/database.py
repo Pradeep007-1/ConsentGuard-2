@@ -1325,9 +1325,11 @@ def compute_dashboard_stats(connection, user_id=None):
     for r in consent_rows:
         g = r["granted"]
         nv = r["notice_version"]
-        nh = r["notice_hash"] or ""
+        nh = (r["notice_hash"] or "").strip().lower()
+        active_h_clean = (active_h or "").strip().lower()
         if g == 1:
-            if nv == active_ver and (not nh or not active_h or nh == active_h):
+            is_matching_hash = not nh or not active_h_clean or nh == active_h_clean
+            if nv == active_ver and is_matching_hash:
                 active_consents += 1
             else:
                 reconsent_required += 1
