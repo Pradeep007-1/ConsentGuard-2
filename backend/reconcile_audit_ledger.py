@@ -25,8 +25,10 @@ import database
 from database import (
     GENESIS_PREV_HASH,
     compute_audit_hash,
+    compute_canonical_audit_hash,
     get_connection,
     is_postgres,
+    is_valid_row_hash,
     verify_audit_chain,
 )
 
@@ -49,23 +51,10 @@ def inspect_ledger():
     # Check self-hash integrity of every record
     tampered = []
     for r in rows:
-        expected = compute_audit_hash(
-            r["prev_hash"],
-            r["user_id"],
-            r["purpose"],
-            r["action"],
-            r["http_status"],
-            r["reason_code"],
-            r["notice_version"],
-            r["notice_hash"],
-            r["source"],
-            r["created_at"],
-        )
-        if r["row_hash"] != expected:
+        if not is_valid_row_hash(r):
             tampered.append({
                 "id": r["id"],
                 "stored_hash": r["row_hash"],
-                "computed_hash": expected,
                 "created_at": r["created_at"],
             })
 
@@ -207,12 +196,7 @@ def reconcile_ledger(dry_run=True, confirm=False):
 
     # Verify self-hashes first to ensure no tampering has occurred
     for r in rows:
-        calc = compute_audit_hash(
-            r["prev_hash"], r["user_id"], r["purpose"], r["action"],
-            r["http_status"], r["reason_code"], r["notice_version"],
-            r["notice_hash"], r["source"], r["created_at"]
-        )
-        if calc != r["row_hash"]:
+        if not is_valid_row_hash(r):
             print(f"ERROR: Cannot reconcile! Record ID {r['id']} has invalid self-hash.")
             return
 
