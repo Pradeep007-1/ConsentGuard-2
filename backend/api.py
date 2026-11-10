@@ -1947,6 +1947,79 @@ def list_consumers():
     return jsonify(results)
 
 
+@app.post("/api/consumers")
+@app.post("/api/consumers/create")
+def create_consumer():
+    """Registers a new downstream consumer client with hashed API key (Admin only)."""
+    is_auth, err_resp = check_admin_auth()
+    if not is_auth:
+        return err_resp
+
+    data = request.get_json(silent=True) or {}
+    consumer_id = str(data.get("consumer_id", "")).strip().lower()
+    name = str(data.get("name", "")).strip()
+    allowed_purposes = data.get("allowed_purposes") or ["Analytics"]
+    if isinstance(allowed_purposes, str):
+        allowed_purposes = [allowed_purposes]
+
+    if not consumer_id or not name:
+        return jsonify({
+            "error": "consumer_id and name are required.",
+            "reason_code": "MISSING_CONSUMER_FIELDS",
+        }), 400
+
+    raw_api_key = str(data.get("api_key", "")).strip() or f"key_{consumer_id}_{secrets.token_hex(16)}"
+    key_hash = hash_api_key(raw_api_key)
+    now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+    purp_json = json.dumps(allowed_purposes)
+
+    with get_connection() as connection:
+        existing = connection.execute(
+            "SELECT id FROM consumers WHERE consumer_id = ?",
+            (consumer_id,),
+        ).fetchone()
+
+        if existing:
+            return jsonify({
+                "error": f"Conflict: Consumer '{consumer_id}' already exists.",
+                "reason_code": "CONSUMER_ALREADY_EXISTS",
+            }), 409
+
+        connection.execute(
+            """
+            INSERT INTO consumers (consumer_id, name, api_key_hash, allowed_purposes, is_active, created_at)
+            VALUES (?, ?, ?, ?, 1, ?)
+            """,
+            (consumer_id, name, key_hash, purp_json, now_str),
+        )
+
+        auth_user = get_authenticated_user(connection)
+        actor_id = auth_user["id"] if auth_user else "admin"
+
+        append_audit_event(
+            connection=connection,
+            user_id=actor_id,
+            purpose="Consumer Administration",
+            action="consumer_key_created",
+            http_status=201,
+            reason_code="CONSUMER_CREATED",
+            notice_version=NOTICE_VERSION,
+            notice_hash=NOTICE_HASH,
+            source=data.get("source", "admin"),
+            details=f"Downstream consumer registered: {consumer_id} ({name}) with purposes {allowed_purposes}.",
+        )
+
+    return jsonify({
+        "success": True,
+        "consumer_id": consumer_id,
+        "name": name,
+        "api_key": raw_api_key,
+        "allowed_purposes": allowed_purposes,
+        "is_active": True,
+        "message": f"Consumer '{consumer_id}' created successfully.",
+    }), 201
+
+
 @app.post("/api/consumers/revoke")
 def revoke_consumer():
     """Revokes a downstream consumer API key, immediately blocking access."""

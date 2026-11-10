@@ -409,16 +409,15 @@ def is_valid_row_hash(row) -> bool:
 
 def verify_audit_chain(connection, user_id=None, strict_linear=False):
     """
-    Cryptographically verifies the append-only audit ledger.
+    Cryptographically verifies the append-only Merkle DAG audit ledger.
 
     Verifications:
-    1. Every record's self-hash matches sha256(prev_hash + payload) exactly (detects payload or hash tampering).
+    1. Every record's self-hash matches sha256(canonical_json(payload)) exactly (detects payload or hash tampering).
     2. The genesis record's prev_hash matches GENESIS_PREV_HASH ('0' * 64).
     3. Every subsequent record points to a cryptographically verified prior record in the ledger.
-    4. If strict_linear=True, enforces strict single-parent sequential linearity (row[i].prev_hash == row[i-1].row_hash).
-       If strict_linear=False (default for multi-instance serverless deployments), validates Merkle DAG topology,
-       confirming that every record is cryptographically anchored to a verified ancestor, while detecting and
-       reporting any concurrent sibling write branches.
+    4. Legitimate Merkle DAG branches (concurrent writes from multiple workers) are validated and tracked.
+    5. Missing records and broken parent references are detected and reported.
+    6. If strict_linear=True, enforces single-parent sequential linearity (row[i].prev_hash == row[i-1].row_hash).
     """
     if user_id:
         user_rows = connection.execute(
@@ -426,20 +425,47 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
             (user_id,),
         ).fetchall()
 
+        valid_count = 0
+        invalid_records = []
         for idx, row in enumerate(user_rows):
             if not is_valid_row_hash(row):
-                return {
-                    "status": "broken",
-                    "reason_code": "ROW_HASH_TAMPERED",
-                    "verified_count": idx,
-                    "total_count": len(user_rows),
-                    "broken_at_id": row["id"],
-                    "message": f"Audit hash chain broken at record ID {row['id']}: row_hash tampered.",
-                }
+                invalid_records.append({
+                    "id": row["id"],
+                    "error": "ROW_HASH_TAMPERED",
+                    "details": f"Self-hash does not match canonical payload for record ID {row['id']}.",
+                })
+            else:
+                valid_count += 1
+
+        if invalid_records:
+            first_err = invalid_records[0]
+            err_msg = f"Audit hash chain broken at record ID {first_err['id']}: row_hash tampered."
+            return {
+                "status": "broken",
+                "reason_code": "ROW_HASH_TAMPERED",
+                "verified_count": valid_count,
+                "total_count": len(user_rows),
+                "total_records": len(user_rows),
+                "valid_records": valid_count,
+                "invalid_records": len(invalid_records),
+                "broken_references": 0,
+                "detected_tampering": True,
+                "tampered_records": invalid_records,
+                "error_details": [r["details"] for r in invalid_records],
+                "broken_at_id": first_err["id"],
+                "message": err_msg,
+            }
         return {
             "status": "intact",
             "verified_count": len(user_rows),
             "total_count": len(user_rows),
+            "total_records": len(user_rows),
+            "valid_records": len(user_rows),
+            "invalid_records": 0,
+            "broken_references": 0,
+            "detected_tampering": False,
+            "tampered_records": [],
+            "error_details": [],
             "message": f"User audit records intact across all {len(user_rows)} events.",
         }
 
@@ -449,6 +475,13 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
             "status": "intact",
             "verified_count": 0,
             "total_count": 0,
+            "total_records": 0,
+            "valid_records": 0,
+            "invalid_records": 0,
+            "broken_references": 0,
+            "detected_tampering": False,
+            "tampered_records": [],
+            "error_details": [],
             "branches_count": 0,
             "branches": [],
             "topology": "linear",
@@ -458,6 +491,7 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
     known_hashes = {GENESIS_PREV_HASH: 0}  # maps row_hash -> record id (0 = genesis)
     branches = []
     expected_prev = GENESIS_PREV_HASH
+    valid_count = 0
 
     for idx, row in enumerate(rows):
         cur_id = row["id"]
@@ -466,33 +500,51 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
 
         # 1. Verify self-hash integrity (canonical JSON + legacy pipe fallback)
         if not is_valid_row_hash(row):
+            err_msg = f"Audit hash chain broken at record ID {cur_id}: row_hash tampered."
             return {
                 "status": "broken",
                 "reason_code": "ROW_HASH_TAMPERED",
-                "verified_count": idx,
+                "verified_count": valid_count,
                 "total_count": len(rows),
+                "total_records": len(rows),
+                "valid_records": valid_count,
+                "invalid_records": len(rows) - valid_count,
+                "broken_references": 0,
+                "detected_tampering": True,
+                "tampered_records": [{"id": cur_id, "error": "ROW_HASH_TAMPERED"}],
+                "error_details": [err_msg],
                 "broken_at_id": cur_id,
-                "message": f"Audit hash chain broken at record ID {cur_id}: row_hash tampered.",
+                "message": err_msg,
             }
 
         # 2. Check parent linkage
         if idx == 0:
             if prev_h != GENESIS_PREV_HASH:
+                err_msg = f"Audit hash chain broken at record ID {cur_id}: genesis prev_hash mismatch."
                 return {
                     "status": "broken",
                     "reason_code": "GENESIS_PREV_HASH_MISMATCH",
                     "verified_count": 0,
                     "total_count": len(rows),
+                    "total_records": len(rows),
+                    "valid_records": 0,
+                    "invalid_records": len(rows),
+                    "broken_references": 1,
+                    "detected_tampering": True,
+                    "tampered_records": [{"id": cur_id, "error": "GENESIS_PREV_HASH_MISMATCH"}],
+                    "error_details": [err_msg],
                     "broken_at_id": cur_id,
-                    "message": f"Audit hash chain broken at record ID {cur_id}: genesis prev_hash mismatch.",
+                    "message": err_msg,
                 }
             expected_prev = row_h
+            valid_count += 1
         else:
             if prev_h == expected_prev:
                 # Direct linear continuation
                 expected_prev = row_h
+                valid_count += 1
             elif prev_h in known_hashes:
-                # Sibling branch off a verified preceding ancestor (concurrent write)
+                # Sibling branch off a verified preceding ancestor (concurrent write in Merkle DAG)
                 parent_id = known_hashes[prev_h]
                 branch_info = {
                     "record_id": cur_id,
@@ -502,27 +554,47 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
                 }
                 branches.append(branch_info)
                 if strict_linear:
+                    err_msg = (
+                        f"Audit hash chain broken at record ID {cur_id}: prev_hash mismatch "
+                        f"(concurrent write branch detected off record {parent_id})."
+                    )
                     return {
                         "status": "broken",
                         "reason_code": "BRANCH_DETECTED",
-                        "verified_count": idx,
+                        "verified_count": valid_count,
                         "total_count": len(rows),
+                        "total_records": len(rows),
+                        "valid_records": valid_count,
+                        "invalid_records": len(rows) - valid_count,
+                        "broken_references": 0,
+                        "detected_tampering": False,
+                        "tampered_records": [],
+                        "error_details": [err_msg],
                         "broken_at_id": cur_id,
-                        "message": (
-                            f"Audit hash chain broken at record ID {cur_id}: prev_hash mismatch "
-                            f"(concurrent write branch detected off record {parent_id})."
-                        ),
+                        "branches_count": len(branches),
+                        "branches": branches,
+                        "topology": "dag",
+                        "message": err_msg,
                     }
                 expected_prev = row_h
+                valid_count += 1
             else:
-                # Unknown ancestor - genuine break or missing record
+                # Unknown ancestor - genuine break, missing intermediate record, or invalid reference
+                err_msg = f"Audit hash chain broken at record ID {cur_id}: prev_hash mismatch."
                 return {
                     "status": "broken",
                     "reason_code": "BROKEN_ANCESTOR_LINK",
-                    "verified_count": idx,
+                    "verified_count": valid_count,
                     "total_count": len(rows),
+                    "total_records": len(rows),
+                    "valid_records": valid_count,
+                    "invalid_records": len(rows) - valid_count,
+                    "broken_references": 1,
+                    "detected_tampering": True,
+                    "tampered_records": [{"id": cur_id, "error": "BROKEN_ANCESTOR_LINK", "invalid_prev_hash": prev_h}],
+                    "error_details": [err_msg],
                     "broken_at_id": cur_id,
-                    "message": f"Audit hash chain broken at record ID {cur_id}: prev_hash mismatch.",
+                    "message": err_msg,
                 }
 
         known_hashes[row_h] = cur_id
@@ -532,6 +604,13 @@ def verify_audit_chain(connection, user_id=None, strict_linear=False):
         "status": "intact",
         "verified_count": len(rows),
         "total_count": len(rows),
+        "total_records": len(rows),
+        "valid_records": len(rows),
+        "invalid_records": 0,
+        "broken_references": 0,
+        "detected_tampering": False,
+        "tampered_records": [],
+        "error_details": [],
         "branches_count": len(branches),
         "branches": branches,
         "topology": "linear" if not branches else "dag",

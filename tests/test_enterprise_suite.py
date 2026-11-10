@@ -1107,5 +1107,130 @@ def test_38_consent_lifecycle_stale_notice_and_reconsent_requirement(enterprise_
     assert "consent_rejected_stale" in actions
 
 
+def test_39_merkle_dag_audit_verification_fields_and_tamper_detection(enterprise_app):
+    """Test 39: Audit verification API returns comprehensive fields and accurately detects tampering."""
+    client, test_db = enterprise_app
+
+    # Perform some normal operations to generate audit records
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    client.post("/api/data-access", json={"purpose": "Analytics"})
+
+    # 1. Verification of intact ledger
+    verify_res = client.get("/api/audit/verify")
+    assert verify_res.status_code == 200
+    data = verify_res.get_json()
+    assert data["status"] == "intact"
+    assert data["total_records"] >= 3
+    assert data["valid_records"] == data["total_records"]
+    assert data["invalid_records"] == 0
+    assert data["broken_references"] == 0
+    assert data["detected_tampering"] is False
+    assert data["error_details"] == []
+    assert "branches_count" in data
+    assert "topology" in data
+
+    # 2. Tampering detection: Alter an existing record's purpose
+    with database.get_connection() as conn:
+        conn.execute("DROP TRIGGER IF EXISTS trg_prevent_audit_update")
+        target_id = conn.execute("SELECT id FROM audit_events ORDER BY id DESC LIMIT 1").fetchone()["id"]
+        conn.execute("UPDATE audit_events SET purpose = 'UnauthorizedTamper' WHERE id = ?", (target_id,))
+
+    # Verification must report broken and detect tampering
+    tampered_res = client.get("/api/audit/verify")
+    assert tampered_res.status_code == 409
+    t_data = tampered_res.get_json()
+    assert t_data["status"] == "broken"
+    assert t_data["detected_tampering"] is True
+    assert t_data["reason_code"] == "ROW_HASH_TAMPERED"
+    assert t_data["broken_at_id"] == target_id
+    assert len(t_data["error_details"]) > 0
+
+
+def test_40_merkle_dag_broken_parent_reference_and_missing_record_detection(enterprise_app):
+    """Test 40: Merkle DAG detects deleted intermediate records and broken parent references."""
+    client, test_db = enterprise_app
+
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    client.post("/api/consents", json={"purpose": "Marketing", "action": "grant"})
+    client.post("/api/consents", json={"purpose": "Service Improvement", "action": "grant"})
+
+    # Delete an intermediate record to break the DAG linkage
+    with database.get_connection() as conn:
+        conn.execute("DROP TRIGGER IF EXISTS trg_prevent_audit_delete")
+        rows = conn.execute("SELECT id FROM audit_events ORDER BY id ASC").fetchall()
+        assert len(rows) >= 3
+        victim_id = rows[1]["id"]
+        conn.execute("DELETE FROM audit_events WHERE id = ?", (victim_id,))
+
+    # Verify DAG detects broken parent reference
+    verify_res = client.get("/api/audit/verify")
+    assert verify_res.status_code == 409
+    data = verify_res.get_json()
+    assert data["status"] == "broken"
+    assert data["reason_code"] == "BROKEN_ANCESTOR_LINK"
+    assert data["detected_tampering"] is True
+    assert data["broken_references"] >= 1
+
+
+def test_41_consumer_api_key_creation_admin_and_audit_event(enterprise_app):
+    """Test 41: Administrator registers new consumer, hashes API key, appends audit trail, and permits access."""
+    client, _ = enterprise_app
+
+    admin_login = client.post("/api/auth/demo-login", json={"user_id": "admin-user"})
+    admin_token = admin_login.get_json()["token"]
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Ordinary user cannot create consumers (403)
+    user_login = client.post("/api/auth/demo-login", json={"user_id": "user-regular"})
+    user_token = user_login.get_json()["token"]
+    blocked_create = client.post(
+        "/api/consumers/create",
+        headers={"Authorization": f"Bearer {user_token}"},
+        json={"consumer_id": "new-partner", "name": "New Partner"},
+    )
+    assert blocked_create.status_code == 403
+
+    # 2. Administrator creates new consumer
+    create_res = client.post(
+        "/api/consumers/create",
+        headers=admin_headers,
+        json={
+            "consumer_id": "partner-health",
+            "name": "Health Research Partner",
+            "allowed_purposes": ["Analytics"],
+            "api_key": "key_partner_health_custom_token",
+        },
+    )
+    assert create_res.status_code == 201
+    created_key = create_res.get_json()["api_key"]
+
+    # 3. User grants consent for Analytics
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+
+    # 4. Downstream sharing succeeds with newly created key
+    share_res = client.post(
+        "/api/share/request",
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "api_key": created_key,
+        },
+    )
+    assert share_res.status_code == 200
+    assert share_res.get_json()["allowed"] is True
+
+    # 5. Verify consumer_key_created audit event exists in ledger
+    with database.get_connection() as conn:
+        event = conn.execute(
+            "SELECT action, reason_code FROM audit_events WHERE action = 'consumer_key_created' LIMIT 1"
+        ).fetchone()
+        assert event is not None
+        assert event["reason_code"] == "CONSUMER_CREATED"
+
+
+
 
 
