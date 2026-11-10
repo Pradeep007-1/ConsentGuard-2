@@ -1621,6 +1621,107 @@ def test_44_live_cybersecurity_demonstration_six_scenarios():
     assert exit_code == 0
 
 
+def test_45_api_reliability_and_health_diagnostics(enterprise_app):
+    """
+    Test 45: Comprehensive Part 10 API Reliability Validation:
+    1. Safe health endpoint reports all required operational and diagnostic fields
+    2. Zero leakage of passwords, secrets, connection strings, or environment tokens
+    3. Backend resilience against malformed or non-dictionary JSON payloads (lists, primitives, null)
+    4. Safe handling of invalid query parameters (negative/non-digit limits)
+    5. Database failure simulation returns 503 DATABASE_UNAVAILABLE without crash or credential leak
+    6. Uniform JSON error responses across endpoints
+    """
+    client, _ = enterprise_app
+
+    # 1. Health Endpoint Reporting
+    health_res = client.get("/api/health")
+    assert health_res.status_code == 200
+    health_data = health_res.get_json()
+    assert health_data["status"] == "ok"
+    assert health_data["application_status"] == "healthy"
+    assert health_data["database"] == "connected"
+    assert health_data["database_connectivity"] is True
+    assert "operating_mode" in health_data
+    assert "current_operating_mode" in health_data
+    assert "diagnostics" in health_data
+    diag = health_data["diagnostics"]
+    assert "active_notice_version" in diag
+    assert "active_notice_hash_prefix" in diag
+    assert "supported_purposes_count" in diag
+    assert "uptime_seconds" in diag
+
+    # Verify zero secrets or credentials leaked in health response
+    raw_health = health_res.get_data(as_text=True)
+    assert "password" not in raw_health.lower()
+    assert "secret" not in raw_health.lower()
+    assert "admin_key" not in raw_health.lower()
+
+    # 2. Crash Prevention: Non-dictionary JSON payloads (lists, raw primitives)
+    # 2a. List payload to /api/auth/login
+    res_list_login = client.post(
+        "/api/auth/login",
+        data="[1, 2, 3]",
+        content_type="application/json",
+    )
+    assert res_list_login.status_code == 400
+    assert res_list_login.get_json()["reason_code"] == "MISSING_CREDENTIALS"
+
+    # 2b. String primitive payload to /api/auth/signup
+    res_str_signup = client.post(
+        "/api/auth/signup",
+        data='"just a string"',
+        content_type="application/json",
+    )
+    assert res_str_signup.status_code == 400
+    assert res_str_signup.get_json()["reason_code"] == "INVALID_NAME"
+
+    # 2c. Number primitive payload to /api/consents
+    res_num_consents = client.post(
+        "/api/consents",
+        data="99999",
+        content_type="application/json",
+    )
+    assert res_num_consents.status_code == 400
+    assert res_num_consents.get_json()["reason_code"] == "INVALID_PURPOSE"
+
+    # 2d. Array payload to /api/share/request
+    res_arr_share = client.post(
+        "/api/share/request",
+        data="['item1', 'item2']",
+        content_type="application/json",
+    )
+    assert res_arr_share.status_code == 401
+    assert res_arr_share.get_json()["reason_code"] == "INVALID_API_KEY"
+
+    # 3. Crash Prevention: Invalid query parameters
+    # Negative limit to /api/audit
+    res_neg_limit = client.get(
+        "/api/audit?limit=-50&source=test",
+    )
+    assert res_neg_limit.status_code == 200
+
+    # Non-digit limit to /api/consent/history
+    res_str_limit = client.get(
+        "/api/consent/history?limit=invalid_param&source=test",
+    )
+    assert res_str_limit.status_code == 200
+
+    # 4. Database Failure Handling Simulation
+    with patch("api.get_connection") as mock_conn:
+        mock_conn.side_effect = sqlite3.OperationalError("Simulated database failure: connection lost")
+        fail_res = client.get("/api/health")
+        assert fail_res.status_code == 503
+        fail_data = fail_res.get_json()
+        assert fail_data["status"] == "error"
+        assert fail_data["application_status"] == "unhealthy"
+        assert fail_data["database"] == "disconnected"
+        assert fail_data["database_connectivity"] is False
+        assert fail_data["reason_code"] == "DATABASE_UNAVAILABLE"
+        # Ensure raw internal traceback or connection strings are NOT exposed
+        assert "OperationalError" not in fail_res.get_data(as_text=True)
+
+
+
 
 
 

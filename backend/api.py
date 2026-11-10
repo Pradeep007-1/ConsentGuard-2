@@ -60,6 +60,17 @@ app.config.update(
     MAX_CONTENT_LENGTH=2 * 1024 * 1024,   # 2 Megabytes request limit to prevent DoS
 )
 
+_SERVER_START_TIME = time.time()
+
+
+def get_request_json() -> dict:
+    """Safely extracts JSON payload from the request, guaranteeing a dictionary without raising AttributeError."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return {}
+    return data
+
+
 # CORS Allow-List Configuration
 DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
     r"^https?://localhost(:\d+)?$",
@@ -732,20 +743,39 @@ def illustration():
 
 @app.get("/api/health")
 def health():
+    load_active_notice()
     try:
         from database import is_postgres
+        operating_mode = "local_offline" if is_local_mode() else "cloud_persistent" if (is_postgres() or not is_production) else "cloud_ephemeral"
         with get_connection() as connection:
             connection.execute("SELECT 1").fetchone()
+            audit_cnt_row = connection.execute("SELECT COUNT(*) as cnt FROM audit_events").fetchone()
+            total_audit_events = audit_cnt_row["cnt"] if audit_cnt_row else 0
+
         db_type = "postgresql" if is_postgres() else "sqlite"
         is_persistent = is_postgres() or not is_production
+        uptime_sec = int(time.time() - _SERVER_START_TIME)
+
         resp_data = {
             "status": "ok",
+            "application_status": "healthy",
             "service": "ConsentGuard API",
+            "version": "1.0.0",
             "database": "connected",
+            "database_connectivity": True,
             "database_type": db_type,
+            "operating_mode": operating_mode,
+            "current_operating_mode": operating_mode,
             "is_persistent": is_persistent,
             "local_mode": is_local_mode(),
             "offline_ready": True,
+            "diagnostics": {
+                "active_notice_version": NOTICE_VERSION,
+                "active_notice_hash_prefix": NOTICE_HASH[:12] if NOTICE_HASH else "",
+                "supported_purposes_count": len(PURPOSES),
+                "total_audit_events": total_audit_events,
+                "uptime_seconds": uptime_sec,
+            },
         }
         if is_local_mode():
             resp_data["environment"] = "local_offline"
@@ -758,12 +788,24 @@ def health():
         return jsonify(resp_data), 200
     except Exception as e:
         app.logger.error(f"Health check failed: {e}")
+        operating_mode = "local_offline" if is_local_mode() else "cloud"
+        uptime_sec = int(time.time() - _SERVER_START_TIME)
         return jsonify({
             "status": "error",
+            "application_status": "unhealthy",
             "service": "ConsentGuard API",
+            "version": "1.0.0",
             "database": "disconnected",
+            "database_connectivity": False,
+            "operating_mode": operating_mode,
+            "current_operating_mode": operating_mode,
             "error": "Database service unavailable.",
             "reason_code": "DATABASE_UNAVAILABLE",
+            "diagnostics": {
+                "active_notice_version": NOTICE_VERSION,
+                "active_notice_hash_prefix": NOTICE_HASH[:12] if NOTICE_HASH else "",
+                "uptime_seconds": uptime_sec,
+            },
         }), 503
 
 
@@ -773,7 +815,7 @@ def health():
 @app.post("/api/auth/signup")
 def signup():
     load_active_notice()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     name = str(data.get("name", "")).strip()
     email = str(data.get("email", "")).strip().lower()
     password = str(data.get("password", ""))
@@ -860,7 +902,7 @@ def signup():
 @app.post("/api/auth/login")
 def login():
     load_active_notice()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     email = str(data.get("email", "")).strip().lower()
     password = str(data.get("password", ""))
 
@@ -935,7 +977,7 @@ def login():
 @app.post("/api/auth/demo-login")
 def demo_login():
     load_active_notice()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     demo_id = str(data.get("user_id", "demo-user")).strip()
 
     valid_demos = {"demo-user", "user1", "user2", "user3", "user-regular", "admin-user"}
@@ -1418,7 +1460,7 @@ def update_notice():
     if not is_auth:
         return err_resp
 
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     new_version = str(data.get("notice_version", "2.0")).strip()
     if not new_version:
         return jsonify({
@@ -1505,7 +1547,7 @@ def reset_notice():
     if not is_auth:
         return err_resp
 
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     source = data.get("source", "user")
 
     NOTICE_VERSION = DEFAULT_NOTICE_VERSION
@@ -1726,7 +1768,7 @@ def get_consents_history():
         return err
     limit = request.args.get("limit", "100")
     try:
-        limit_val = int(limit)
+        limit_val = max(1, min(1000, int(limit)))
     except Exception:
         limit_val = 100
     with get_connection() as connection:
@@ -1782,7 +1824,7 @@ def get_access_logs():
         user_id = None
     limit = request.args.get("limit", "100")
     try:
-        limit_val = int(limit)
+        limit_val = max(1, min(1000, int(limit)))
     except Exception:
         limit_val = 100
     with get_connection() as connection:
@@ -1794,7 +1836,7 @@ def get_access_logs():
 @app.route("/api/consents", methods=["POST"])
 def record_consent():
     load_active_notice()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     source = data.get("source", "user")
     req_user = data.get("user_id")
     purpose = data.get("purpose")
@@ -1962,7 +2004,7 @@ def record_consent():
 @app.post("/api/data-access")
 def data_access():
     load_active_notice()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     source = data.get("source", "user")
     req_user = data.get("user_id")
     purpose = data.get("purpose")
@@ -2037,7 +2079,7 @@ def share_request():
     8. Valid request -> 200 ALLOW with permitted fields
     """
     load_active_notice()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     api_key = (
         request.headers.get("X-API-Key", "").strip()
         or str(data.get("api_key", "")).strip()
@@ -2247,7 +2289,7 @@ def create_consumer():
     if not is_auth:
         return err_resp
 
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     consumer_id = str(data.get("consumer_id", "")).strip().lower()
     name = str(data.get("name", "")).strip()
     allowed_purposes = data.get("allowed_purposes") or ["Analytics"]
@@ -2319,7 +2361,7 @@ def revoke_consumer():
     if not is_auth:
         return err_resp
 
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     consumer_id = str(data.get("consumer_id", "")).strip()
     if not consumer_id:
         return jsonify({
@@ -2377,7 +2419,7 @@ def restore_consumer():
     if not is_auth:
         return err_resp
 
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     consumer_id = str(data.get("consumer_id", "")).strip()
     if not consumer_id:
         return jsonify({
@@ -2525,8 +2567,9 @@ def get_audit():
     query += " ORDER BY id DESC"
 
     if limit and limit.isdigit():
+        limit_val = max(1, min(5000, int(limit)))
         query += " LIMIT ?"
-        params.append(int(limit))
+        params.append(limit_val)
 
     with get_connection() as connection:
         rows = connection.execute(query, tuple(params)).fetchall()
@@ -2624,7 +2667,7 @@ def reset_demo():
     NOTICE_HASH = DEFAULT_NOTICE_HASH
 
     auth_user = get_authenticated_user()
-    data = request.get_json(silent=True) or {}
+    data = get_request_json()
     source = data.get("source", "user")
 
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
