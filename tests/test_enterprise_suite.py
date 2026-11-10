@@ -11,6 +11,8 @@ from unittest.mock import patch
 import pytest
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 BACKEND_DIR = ROOT_DIR / "backend"
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
@@ -1602,6 +1604,22 @@ def test_43_cybersecurity_protections_comprehensive_suite(enterprise_app):
     dup_withdraw = client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
     assert dup_withdraw.status_code == 200
     assert dup_withdraw.get_json()["reason_code"] == "CONSENT_ALREADY_WITHDRAWN"
+
+
+def test_44_live_cybersecurity_demonstration_six_scenarios():
+    """
+    Test 44: Complete automated validation of Part 9 Live Cybersecurity Demonstration:
+      Scenario 1: Unauthorized Access -> Rejected (HTTP 401/403)
+      Scenario 2: Purpose Violation -> Blocked (HTTP 403 CONSUMER_NOT_AUTHORIZED)
+      Scenario 3: Consent Withdrawal -> Access Denied (HTTP 403 WITHDRAWN)
+      Scenario 4: Notice Version Change -> Stale Notice Identified (HTTP 403 NOTICE_MISMATCH)
+      Scenario 5: Audit Tampering -> Detected on isolated copy (Merkle DAG ROW_HASH_TAMPERED)
+      Scenario 6: API-Key Revocation -> Access Rejected (HTTP 401 API_KEY_REVOKED)
+    """
+    import demo_live_security
+    exit_code = demo_live_security.run_live_demonstration()
+    assert exit_code == 0
+
 
 
 
