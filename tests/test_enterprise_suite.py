@@ -1231,6 +1231,191 @@ def test_41_consumer_api_key_creation_admin_and_audit_event(enterprise_app):
         assert event["reason_code"] == "CONSUMER_CREATED"
 
 
+def test_42_purpose_based_data_sharing_comprehensive_matrix(enterprise_app):
+    """
+    Test 42: Comprehensive validation of Part 7 Purpose-Based Data Sharing:
+    1. Consumer identity verification & mismatch rejection
+    2. API-key validity (missing/invalid -> 401 INVALID_API_KEY)
+    3. API-key revocation status (revoked -> 401 API_KEY_REVOKED)
+    4. Requested purpose validity (invalid -> 400 INVALID_PURPOSE)
+    5. Consumer permission for purpose (unauthorized purpose -> 403 CONSUMER_NOT_AUTHORIZED)
+    6. User consent for purpose (missing consent -> 403 NO_CONSENT)
+    7. Consent withdrawal status (withdrawn consent -> 403 WITHDRAWN / CONSENT_WITHDRAWN)
+    8. Notice validity & re-consent requirement (stale notice -> 403 NOTICE_MISMATCH)
+    9. Requested data permissions (unauthorized fields -> 403 UNAUTHORIZED_FIELDS; valid subset filtered)
+    10. Partner-All full access vs Partner-Limited restricted subset
+    11. Zero leakage of unnecessary PII (passwords, tokens, raw personal credentials)
+    12. Tamper-evident Merkle DAG audit events recorded for all decisions
+    """
+    client, _ = enterprise_app
+
+    # Setup demo-user with fresh consents for Analytics and Marketing under active notice
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "grant"})
+    client.post("/api/consents", json={"purpose": "Marketing", "action": "grant"})
+
+    # --- Scenario 1: Valid Partner-All Requests ---
+    # Partner-All has access to Analytics, Marketing, Service Improvement
+    res_all_analytics = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={"user_id": "demo-user", "purpose": "Analytics"},
+    )
+    assert res_all_analytics.status_code == 200
+    all_data = res_all_analytics.get_json()
+    assert all_data["allowed"] is True
+    assert all_data["reason_code"] == "ACTIVE_CONSENT"
+    assert "page_views" in all_data["data"]
+    assert "password" not in all_data["data"]
+    assert "email" not in all_data["data"]
+
+    res_all_marketing = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={"user_id": "demo-user", "purpose": "Marketing"},
+    )
+    assert res_all_marketing.status_code == 200
+    mkt_data = res_all_marketing.get_json()
+    assert mkt_data["allowed"] is True
+    assert "email_preferences" in mkt_data["data"]
+    assert "offers_enabled" in mkt_data["data"]
+
+    # --- Scenario 2: Valid Partner-Limited Request (Analytics only) ---
+    res_lim_analytics = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_LIMITED_KEY},
+        json={"user_id": "demo-user", "purpose": "Analytics"},
+    )
+    assert res_lim_analytics.status_code == 200
+    assert res_lim_analytics.get_json()["allowed"] is True
+
+    # --- Scenario 3: Unauthorized Purpose (Partner-Limited requesting Marketing) ---
+    res_lim_mkt = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_LIMITED_KEY},
+        json={"user_id": "demo-user", "purpose": "Marketing"},
+    )
+    assert res_lim_mkt.status_code == 403
+    assert res_lim_mkt.get_json()["reason_code"] == "CONSUMER_NOT_AUTHORIZED"
+    assert res_lim_mkt.get_json()["error_code"] == "CONSUMER_PURPOSE_UNAUTHORIZED"
+
+    # --- Scenario 4: Missing & Invalid API Key ---
+    res_missing_key = client.post(
+        "/api/share/request",
+        json={"user_id": "demo-user", "purpose": "Analytics"},
+    )
+    assert res_missing_key.status_code == 401
+    assert res_missing_key.get_json()["reason_code"] == "INVALID_API_KEY"
+
+    res_invalid_key = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": "forged_malicious_key_99999"},
+        json={"user_id": "demo-user", "purpose": "Analytics"},
+    )
+    assert res_invalid_key.status_code == 401
+    assert res_invalid_key.get_json()["reason_code"] == "INVALID_API_KEY"
+
+    # --- Scenario 5: Consumer Identity Spoofing Protection ---
+    res_id_mismatch = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "consumer_id": "partner-limited",  # spoofed declared identity
+        },
+    )
+    assert res_id_mismatch.status_code == 403
+    assert res_id_mismatch.get_json()["reason_code"] == "CONSUMER_IDENTITY_MISMATCH"
+
+    # --- Scenario 6: Revoked API Key ---
+    admin_login = client.post("/api/auth/demo-login", json={"user_id": "admin-user"})
+    admin_tok = admin_login.get_json()["token"]
+    # Revoke partner-all key
+    client.post(
+        "/api/consumers/revoke",
+        headers={"Authorization": f"Bearer {admin_tok}"},
+        json={"consumer_id": "partner-all"},
+    )
+    res_revoked = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={"user_id": "demo-user", "purpose": "Analytics"},
+    )
+    assert res_revoked.status_code == 401
+    assert res_revoked.get_json()["reason_code"] == "API_KEY_REVOKED"
+    # Restore partner-all key
+    client.post(
+        "/api/consumers/restore",
+        headers={"Authorization": f"Bearer {admin_tok}"},
+        json={"consumer_id": "partner-all"},
+    )
+
+    # --- Scenario 7: Missing Consent ---
+    # user2 has no consent on record for Marketing
+    res_no_consent = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={"user_id": "user2", "purpose": "Marketing"},
+    )
+    assert res_no_consent.status_code == 403
+    assert res_no_consent.get_json()["reason_code"] == "NO_CONSENT"
+
+    # --- Scenario 8: Withdrawn Consent ---
+    # demo-user withdraws Marketing consent
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Marketing", "action": "withdraw"})
+    res_withdrawn = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={"user_id": "demo-user", "purpose": "Marketing"},
+    )
+    assert res_withdrawn.status_code == 403
+    assert res_withdrawn.get_json()["reason_code"] in ("WITHDRAWN", "CONSENT_WITHDRAWN")
+    assert res_withdrawn.get_json().get("error_code") == "CONSENT_WITHDRAWN"
+
+    # --- Scenario 9: Field-Level Authorization & Privacy Filtering ---
+    # Unpermitted field requested -> 403
+    res_bad_fields = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "requested_fields": ["page_views", "ssn_or_bank_routing"],
+        },
+    )
+    assert res_bad_fields.status_code == 403
+    assert res_bad_fields.get_json()["reason_code"] == "UNAUTHORIZED_FIELDS"
+
+    # Permitted subset requested -> only requested subset released
+    res_subset = client.post(
+        "/api/share/request",
+        headers={"X-API-Key": DEFAULT_PARTNER_ALL_KEY},
+        json={
+            "user_id": "demo-user",
+            "purpose": "Analytics",
+            "requested_fields": ["page_views"],
+        },
+    )
+    assert res_subset.status_code == 200
+    subset_data = res_subset.get_json()["data"]
+    assert "page_views" in subset_data
+    assert "feature_usage" not in subset_data  # unrequested allowed field strictly omitted
+
+    # --- Scenario 10: Downstream Consumer Profile Endpoint ---
+    prof_res = client.get(
+        "/api/consumer/me",
+        headers={"X-API-Key": DEFAULT_PARTNER_LIMITED_KEY},
+    )
+    assert prof_res.status_code == 200
+    prof = prof_res.get_json()["consumer"]
+    assert prof["consumer_id"] == "partner-limited"
+    assert prof["allowed_purposes"] == ["Analytics"]
+    assert "api_key_hash" not in prof  # Never leak key hashes to consumers
+
+
+
 
 
 

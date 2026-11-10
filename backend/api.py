@@ -969,6 +969,7 @@ def evaluate_policy_and_consent(
                     "allowed": False,
                     "http_status": 403,
                     "reason_code": "CONSUMER_NOT_AUTHORIZED",
+                    "error_code": "CONSUMER_PURPOSE_UNAUTHORIZED",
                     "reason": reason,
                     "error": reason,
                 }
@@ -1061,6 +1062,7 @@ def evaluate_policy_and_consent(
                 "allowed": False,
                 "http_status": 403,
                 "reason_code": rc,
+                "error_code": "CONSENT_WITHDRAWN" if rc == "WITHDRAWN" else "CONSENT_DENIED",
                 "reason": reason,
                 "error": reason,
                 "message": "Request denied: current active consent is required.",
@@ -1830,17 +1832,19 @@ def data_access():
 # Downstream Purpose-Based Authorization Endpoint (POST /api/share/request)
 # ============================================================================
 @app.post("/api/share/request")
+@app.post("/api/data-share")
 def share_request():
     """
     Downstream consumer data sharing endpoint.
     Validation sequence:
     1. Invalid/missing API key -> 401
-    2. Consumer not authorized for purpose -> 403
-    3. Invalid purpose -> 400
-    4. Unknown user -> 404
-    5. Missing, withdrawn, or stale consent -> 403
-    6. Unauthorized fields -> 403
-    7. Valid request -> 200 ALLOW with permitted fields
+    2. Consumer identity verification -> 403
+    3. Consumer not authorized for purpose -> 403
+    4. Invalid purpose -> 400
+    5. Unknown user -> 404
+    6. Missing, withdrawn, or stale consent -> 403
+    7. Unauthorized fields -> 403
+    8. Valid request -> 200 ALLOW with permitted fields
     """
     load_active_notice()
     data = request.get_json(silent=True) or {}
@@ -1849,6 +1853,15 @@ def share_request():
         or str(data.get("api_key", "")).strip()
         or str(data.get("consumer_key", "")).strip()
     )
+    if not api_key:
+        auth_hdr = request.headers.get("Authorization", "").strip()
+        if auth_hdr.startswith("Bearer "):
+            cand = auth_hdr[7:].strip()
+            if cand.startswith("key_") or not cand.startswith("cg_tok_"):
+                api_key = cand
+        elif auth_hdr.startswith("ApiKey ") or auth_hdr.startswith("Key "):
+            api_key = auth_hdr.split(" ", 1)[1].strip()
+
     user_id = str(data.get("user_id", "")).strip()
     purpose = str(data.get("purpose", "")).strip()
     requested_fields = data.get("requested_fields")
@@ -1859,10 +1872,24 @@ def share_request():
 
     # Step 1: Validate Consumer API Key
     if not api_key:
+        with get_connection() as connection:
+            append_audit_event(
+                connection=connection,
+                user_id=user_id or "unknown",
+                purpose=purpose or "Unknown",
+                action="data_share_denied",
+                http_status=401,
+                reason_code="INVALID_API_KEY",
+                notice_version=NOTICE_VERSION,
+                notice_hash=NOTICE_HASH,
+                source=source,
+                details="Downstream request rejected: missing API key.",
+            )
         return jsonify({
             "allowed": False,
             "http_status": 401,
             "reason_code": "INVALID_API_KEY",
+            "error_code": "INVALID_API_KEY",
             "error": "Unauthorized: Consumer API key is missing or invalid.",
         }), 401
 
@@ -1891,6 +1918,7 @@ def share_request():
                 "allowed": False,
                 "http_status": 401,
                 "reason_code": "INVALID_API_KEY",
+                "error_code": "INVALID_API_KEY",
                 "error": "Unauthorized: Consumer API key is invalid.",
             }), 401
 
@@ -1911,10 +1939,36 @@ def share_request():
                 "allowed": False,
                 "http_status": 401,
                 "reason_code": "API_KEY_REVOKED",
+                "error_code": "API_KEY_REVOKED",
                 "error": f"Unauthorized: Consumer API key for '{consumer_row['consumer_id']}' has been revoked or deactivated.",
             }), 401
 
         consumer = dict(consumer_row)
+
+        # Step 2: Consumer Identity Verification (if client declared consumer_id)
+        declared_consumer_id = str(data.get("consumer_id", "") or request.headers.get("X-Consumer-Id", "")).strip().lower()
+        if declared_consumer_id and declared_consumer_id != consumer["consumer_id"].lower():
+            reason = f"Consumer identity mismatch: declared '{declared_consumer_id}', but authenticated key belongs to '{consumer['consumer_id']}'."
+            append_audit_event(
+                connection=connection,
+                user_id=user_id or "unknown",
+                purpose=purpose or "Unknown",
+                action="data_share_denied",
+                http_status=403,
+                reason_code="CONSUMER_IDENTITY_MISMATCH",
+                notice_version=NOTICE_VERSION,
+                notice_hash=NOTICE_HASH,
+                source=source,
+                details=f"Downstream request rejected: {reason}",
+            )
+            return jsonify({
+                "allowed": False,
+                "http_status": 403,
+                "reason_code": "CONSUMER_IDENTITY_MISMATCH",
+                "error_code": "CONSUMER_MISMATCH",
+                "error": f"Forbidden: Authenticated consumer '{consumer['consumer_id']}' does not match declared consumer '{declared_consumer_id}'.",
+                "reason": reason,
+            }), 403
 
         decision = evaluate_policy_and_consent(
             connection=connection,
@@ -1927,6 +1981,54 @@ def share_request():
 
     decision["consumer_id"] = consumer["consumer_id"]
     return jsonify(decision), decision["http_status"]
+
+
+@app.get("/api/consumer/me")
+@app.get("/api/consumers/me")
+def get_consumer_profile():
+    """Returns the authenticated downstream consumer profile based on API key."""
+    api_key = (
+        request.headers.get("X-API-Key", "").strip()
+        or request.args.get("api_key", "").strip()
+    )
+    if not api_key:
+        auth_hdr = request.headers.get("Authorization", "").strip()
+        if auth_hdr.startswith("Bearer "):
+            cand = auth_hdr[7:].strip()
+            if cand.startswith("key_") or not cand.startswith("cg_tok_"):
+                api_key = cand
+        elif auth_hdr.startswith("ApiKey ") or auth_hdr.startswith("Key "):
+            api_key = auth_hdr.split(" ", 1)[1].strip()
+
+    if not api_key:
+        return jsonify({
+            "authenticated": False,
+            "error": "API key required in X-API-Key or Authorization header.",
+            "reason_code": "MISSING_API_KEY",
+        }), 401
+
+    key_hash = hash_api_key(api_key)
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT id, consumer_id, name, allowed_purposes, is_active, created_at FROM consumers WHERE api_key_hash = ?",
+            (key_hash,),
+        ).fetchone()
+        if not row:
+            return jsonify({
+                "authenticated": False,
+                "error": "Invalid API key.",
+                "reason_code": "INVALID_API_KEY",
+            }), 401
+
+        d = dict(row)
+        try:
+            d["allowed_purposes"] = json.loads(d["allowed_purposes"])
+        except Exception:
+            pass
+        return jsonify({
+            "authenticated": True,
+            "consumer": d,
+        }), 200
 
 
 @app.get("/api/consumers")
