@@ -53,11 +53,13 @@ ConsentGuard is pre-configured with 1-click startup scripts that automatically s
   python app.py
   ```
 
-### 2. Access the Local Application
-Once started, open your web browser and navigate to:
-* **Web UI / Application:** [http://localhost:5001](http://localhost:5001)
-* **Administrative Dashboard:** [http://localhost:5001/dashboard](http://localhost:5001/dashboard)
-* **Safe Health Diagnostics:** [http://localhost:5001/api/health](http://localhost:5001/api/health)
+### 2. Access the Application
+* **Local Offline UI:** [http://localhost:5001](http://localhost:5001)
+* **Local Dashboard:** [http://localhost:5001/dashboard](http://localhost:5001/dashboard)
+* **Local Health Diagnostics:** [http://localhost:5001/api/health](http://localhost:5001/api/health)
+* **Live Cloud Deployment (Vercel):** [https://consent-guard-2.vercel.app](https://consent-guard-2.vercel.app)
+* **Live Cloud Dashboard (Vercel):** [https://consent-guard-2.vercel.app/dashboard](https://consent-guard-2.vercel.app/dashboard)
+* **Live Cloud Health (Vercel):** [https://consent-guard-2.vercel.app/api/health](https://consent-guard-2.vercel.app/api/health)
 
 ### 3. Graceful Shutdown
 To stop the ConsentGuard server at any time:
