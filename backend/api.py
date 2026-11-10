@@ -1469,18 +1469,8 @@ def update_notice():
             "reason_code": "INVALID_NOTICE_VERSION",
         }), 400
 
-    new_text = str(
-        data.get(
-            "notice_text",
-            (
-                f"ConsentGuard v{new_version} Privacy Notice: Revised itemized purpose inventory. "
-                "Enhanced telemetry boundaries and mandatory re-consent verification for downstream consumers."
-            ),
-        )
-    ).strip()
+    req_notice_text = data.get("notice_text")
     source = data.get("source", "user")
-
-    new_hash = hashlib.sha256(new_text.encode("utf-8")).hexdigest()
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
     with get_connection() as connection:
@@ -1489,13 +1479,26 @@ def update_notice():
             (new_version,),
         ).fetchone()
 
-        if existing and existing["hash"] != new_hash:
-            return jsonify({
-                "error": f"Conflict: Notice version '{new_version}' already exists with different text/hash.",
-                "reason_code": "VERSION_EXISTS",
-                "existing_hash": existing["hash"],
-                "requested_hash": new_hash,
-            }), 409
+        if existing and not req_notice_text:
+            new_text = existing["text"]
+            new_hash = existing["hash"]
+        else:
+            new_text = str(
+                req_notice_text
+                or (
+                    f"ConsentGuard v{new_version} Privacy Notice: Revised itemized purpose inventory. "
+                    "Enhanced telemetry boundaries and mandatory re-consent verification for downstream consumers."
+                )
+            ).strip()
+            new_hash = hashlib.sha256(new_text.encode("utf-8")).hexdigest()
+
+            if existing and existing["hash"] != new_hash:
+                return jsonify({
+                    "error": f"Conflict: Notice version '{new_version}' already exists with different text/hash.",
+                    "reason_code": "VERSION_EXISTS",
+                    "existing_hash": existing["hash"],
+                    "requested_hash": new_hash,
+                }), 409
 
         # Atomic notice activation
         connection.execute("UPDATE notice_versions SET is_active = 0")

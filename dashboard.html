@@ -2702,16 +2702,8 @@ function consentFor(purpose) {
 
 // Render Purposes & Dashboard Summaries
 function renderPurposes() {
-  const serverActiveVer = (state.consents && state.consents.find(c => c.active_notice_version)?.active_notice_version) || state.notice?.notice_version || '1.0';
-  const serverActiveHash = (state.consents && state.consents.find(c => c.active_notice_hash)?.active_notice_hash) || state.notice?.notice_hash || '';
-
-  if (state.notice && serverActiveVer && state.notice.notice_version !== serverActiveVer) {
-    state.notice.notice_version = serverActiveVer;
-    state.notice.notice_hash = serverActiveHash;
-    updateNoticeDom();
-  }
-
-  const currentNoticeVer = serverActiveVer;
+  const currentNoticeVer = state.notice?.notice_version || '1.0';
+  const currentNoticeHash = state.notice?.notice_hash || '';
   const displayUser = state.currentUserObj ? (state.currentUserObj.name || state.currentUserObj.id) : (state.currentUser || 'User');
 
   document.querySelectorAll('.active-user-label').forEach(el => {
@@ -2742,7 +2734,7 @@ function renderPurposes() {
       } catch(e) {}
     }
 
-    const noticeHashMismatch = consent?.notice_hash && serverActiveHash && consent.notice_hash !== serverActiveHash;
+    const noticeHashMismatch = consent?.notice_hash && currentNoticeHash && consent.notice_hash !== currentNoticeHash;
     const isOutdated = consent && (consent.needs_reconsent === true || (Number(consent.granted) === 1 && (consent.notice_version !== currentNoticeVer || noticeHashMismatch)));
 
     if (isOutdated) {
@@ -3368,16 +3360,23 @@ async function simulateAccessFromPage() {
 // Notice Administration
 async function bumpNotice() {
   try {
-    await requestJson('/notice/update', {
+    const { response, data } = await requestJson('/notice/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         notice_version: '2.0',
-        notice_text: 'ConsentGuard v2.0 Privacy Notice:\nUpdated purpose boundaries and data governance rules. Consents granted under previous versions are retired and require fresh opt-in.',
         source: 'user'
       })
     });
-    showToast('Privacy Notice updated to v2.0! Stale consents will now be blocked until re-consented.');
+    if (response.status !== 200) {
+      showToast(data.error || 'Failed to update privacy notice.', true);
+      return;
+    }
+    if (data && data.notice_version) {
+      state.notice = data;
+      updateNoticeDom();
+    }
+    showToast('Privacy Notice updated to v' + (data.notice_version || '2.0') + '! Stale consents will now be blocked until re-consented.');
     await refreshAll(0, { includeNotices: true });
   } catch(e) {
     showToast(e.message, true);
@@ -3386,11 +3385,19 @@ async function bumpNotice() {
 
 async function resetNotice() {
   try {
-    await requestJson('/notice/reset', {
+    const { response, data } = await requestJson('/notice/reset', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ source: 'user' })
     });
+    if (response.status !== 200) {
+      showToast(data.error || 'Failed to reset privacy notice.', true);
+      return;
+    }
+    if (data && data.notice_version) {
+      state.notice = data;
+      updateNoticeDom();
+    }
     showToast('Privacy Notice reset to default v1.0.');
     await refreshAll(0, { includeNotices: true });
   } catch(e) {
