@@ -955,4 +955,157 @@ def test_36_notice_deterministic_sha256_and_conflict_handling(enterprise_app):
     assert "2.5" in all_versions
 
 
+def test_37_consent_lifecycle_timestamps_and_status(enterprise_app):
+    """Test 37: Complete consent lifecycle tracking created_at, withdrawn_at, and status endpoint."""
+    client, _ = enterprise_app
+
+    # Sign up user
+    signup_res = client.post(
+        "/api/auth/signup",
+        json={"name": "Lifecycle User", "email": "lifecycle@test.local", "password": "Password123!"},
+    )
+    assert signup_res.status_code == 201
+    token = signup_res.get_json()["token"]
+    user_headers = {"Authorization": f"Bearer {token}"}
+
+    # 1. Initial status is missing
+    status_init = client.get("/api/consent/status?purpose=Analytics", headers=user_headers)
+    assert status_init.status_code == 200
+    assert status_init.get_json()["status"] == "missing"
+    assert status_init.get_json()["granted"] is False
+
+    # 2. Grant consent preserves created_at and sets withdrawn_at to None
+    grant_res = client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "grant"},
+    )
+    assert grant_res.status_code == 201
+    grant_data = grant_res.get_json()
+    created_at = grant_data["created_at"]
+    assert created_at is not None and len(created_at) > 10
+    assert grant_data["withdrawn_at"] is None
+
+    # Status is active
+    status_active = client.get("/api/consent/status?purpose=Analytics", headers=user_headers)
+    assert status_active.status_code == 200
+    assert status_active.get_json()["status"] == "active"
+    assert status_active.get_json()["granted"] is True
+    assert status_active.get_json()["created_at"] == created_at
+    assert status_active.get_json()["withdrawn_at"] is None
+
+    # 3. Withdraw consent records withdrawn_at timestamp
+    withdraw_res = client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "withdraw"},
+    )
+    assert withdraw_res.status_code == 201
+    withdraw_data = withdraw_res.get_json()
+    assert withdraw_data["granted"] is False
+    withdrawn_at = withdraw_data["withdrawn_at"]
+    assert withdrawn_at is not None and len(withdrawn_at) > 10
+    assert withdraw_data["created_at"] == created_at
+
+    # Status is withdrawn
+    status_withdrawn = client.get("/api/consent/status?purpose=Analytics", headers=user_headers)
+    assert status_withdrawn.status_code == 200
+    assert status_withdrawn.get_json()["status"] == "withdrawn"
+    assert status_withdrawn.get_json()["granted"] is False
+
+    # 4. Repeated withdrawal is idempotent and preserves timestamps
+    repeat_withdraw = client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "withdraw"},
+    )
+    assert repeat_withdraw.status_code == 200
+    assert repeat_withdraw.get_json()["reason_code"] == "CONSENT_ALREADY_WITHDRAWN"
+    assert repeat_withdraw.get_json()["created_at"] == created_at
+
+    # 5. Re-granting clears withdrawn_at, restores active status, and keeps original created_at
+    regrant_res = client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "grant"},
+    )
+    assert regrant_res.status_code == 201
+    regrant_data = regrant_res.get_json()
+    assert regrant_data["granted"] is True
+    assert regrant_data["created_at"] == created_at
+    assert regrant_data["withdrawn_at"] is None
+
+
+def test_38_consent_lifecycle_stale_notice_and_reconsent_requirement(enterprise_app):
+    """Test 38: Outdated consent triggers re-consent requirement, 409 on stale grant, and persists history."""
+    client, _ = enterprise_app
+
+    # Sign up user
+    signup_res = client.post(
+        "/api/auth/signup",
+        json={"name": "Reconsent User", "email": "reconsent@test.local", "password": "Password123!"},
+    )
+    token = signup_res.get_json()["token"]
+    user_headers = {"Authorization": f"Bearer {token}"}
+
+    # Grant under notice v1.0
+    client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "grant"},
+    )
+
+    # Bump notice to v2.0 as admin
+    admin_login = client.post("/api/auth/demo-login", json={"user_id": "admin-user"})
+    admin_token = admin_login.get_json()["token"]
+    client.post(
+        "/api/notice/update",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        json={"notice_version": "2.0"},
+    )
+
+    # Consent status now reports status="stale" and needs_reconsent=True
+    status_stale = client.get("/api/consent/status?purpose=Analytics", headers=user_headers)
+    assert status_stale.status_code == 200
+    assert status_stale.get_json()["status"] == "stale"
+    assert status_stale.get_json()["needs_reconsent"] is True
+
+    # Data access is blocked due to stale notice
+    access_res = client.post("/api/data-access", headers=user_headers, json={"purpose": "Analytics"})
+    assert access_res.status_code == 403
+    assert access_res.get_json()["reason_code"] == "NOTICE_MISMATCH"
+
+    # Attempting to grant with explicit stale version v1.0 returns 409 STALE_NOTICE
+    stale_grant = client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "grant", "notice_version": "1.0", "notice_hash": "old_hash"},
+    )
+    assert stale_grant.status_code == 409
+    assert stale_grant.get_json()["reason_code"] == "STALE_NOTICE"
+
+    # Re-consenting under active notice v2.0 restores access
+    fresh_grant = client.post(
+        "/api/consents",
+        headers=user_headers,
+        json={"purpose": "Analytics", "action": "grant", "notice_version": "2.0"},
+    )
+    assert fresh_grant.status_code == 201
+
+    # Verify data access is permitted again
+    allowed_res = client.post("/api/data-access", headers=user_headers, json={"purpose": "Analytics"})
+    assert allowed_res.status_code == 200
+    assert allowed_res.get_json()["allowed"] is True
+
+    # History endpoint contains chronological lifecycle events with cryptographic hashes
+    history_res = client.get("/api/consent/history", headers=user_headers)
+    assert history_res.status_code == 200
+    events = history_res.get_json()
+    assert len(events) >= 3
+    actions = [e["action"] for e in events]
+    assert "grant" in actions
+    assert "consent_rejected_stale" in actions
+
+
+
 

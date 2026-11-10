@@ -750,14 +750,24 @@ def seed_demo_users(connection):
         ("demo-user", "Service Improvement", 1, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, "grant"),
     ]
     for uid, purpose, granted, ver, h, action in demo_consents:
-        connection.execute(
-            """
-            INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (user_id, purpose) DO NOTHING
-            """,
-            (uid, purpose, granted, ver, h, action, now_str),
-        )
+        try:
+            connection.execute(
+                """
+                INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, created_at, withdrawn_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                ON CONFLICT (user_id, purpose) DO NOTHING
+                """,
+                (uid, purpose, granted, ver, h, action, now_str, now_str),
+            )
+        except Exception:
+            connection.execute(
+                """
+                INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (user_id, purpose) DO NOTHING
+                """,
+                (uid, purpose, granted, ver, h, action, now_str),
+            )
 
     # Ensure baseline seeded consents also generate audit trail if none exists
     existing_seed_audit = connection.execute(
@@ -827,13 +837,28 @@ def initialize_database():
                 notice_version TEXT NOT NULL,
                 notice_hash TEXT NOT NULL DEFAULT '',
                 last_action TEXT NOT NULL DEFAULT 'grant',
+                created_at TEXT NOT NULL DEFAULT '',
+                withdrawn_at TEXT,
                 updated_at TEXT NOT NULL,
                 UNIQUE (user_id, purpose)
             )
             """
         )
 
-        if not pg:
+        if pg:
+            try:
+                connection.execute(
+                    "ALTER TABLE consents ADD COLUMN IF NOT EXISTS created_at TEXT NOT NULL DEFAULT '';"
+                )
+                connection.execute(
+                    "ALTER TABLE consents ADD COLUMN IF NOT EXISTS withdrawn_at TEXT;"
+                )
+                connection.execute(
+                    "UPDATE consents SET created_at = updated_at WHERE created_at = '' OR created_at IS NULL;"
+                )
+            except Exception:
+                pass
+        else:
             consent_cols = [
                 row["name"]
                 for row in connection.execute("PRAGMA table_info(consents)").fetchall()
@@ -846,6 +871,17 @@ def initialize_database():
                 connection.execute(
                     "ALTER TABLE consents ADD COLUMN notice_hash TEXT NOT NULL DEFAULT ''"
                 )
+            if "created_at" not in consent_cols:
+                connection.execute(
+                    "ALTER TABLE consents ADD COLUMN created_at TEXT NOT NULL DEFAULT ''"
+                )
+            if "withdrawn_at" not in consent_cols:
+                connection.execute(
+                    "ALTER TABLE consents ADD COLUMN withdrawn_at TEXT"
+                )
+            connection.execute(
+                "UPDATE consents SET created_at = updated_at WHERE created_at = '' OR created_at IS NULL"
+            )
 
         # 3. Audit Events Table
         connection.execute(

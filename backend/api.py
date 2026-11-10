@@ -771,14 +771,24 @@ def demo_login():
         if demo_id == "demo-user":
             now_str_demo = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
             for p in ["Analytics", "Marketing", "Service Improvement"]:
-                connection.execute(
-                    """
-                    INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
-                    VALUES (?, ?, 1, ?, ?, 'grant', ?)
-                    ON CONFLICT (user_id, purpose) DO NOTHING
-                    """,
-                    ("demo-user", p, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, now_str_demo),
-                )
+                try:
+                    connection.execute(
+                        """
+                        INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, created_at, withdrawn_at, updated_at)
+                        VALUES (?, ?, 1, ?, ?, 'grant', ?, NULL, ?)
+                        ON CONFLICT (user_id, purpose) DO NOTHING
+                        """,
+                        ("demo-user", p, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, now_str_demo, now_str_demo),
+                    )
+                except Exception:
+                    connection.execute(
+                        """
+                        INSERT INTO consents (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+                        VALUES (?, ?, 1, ?, ?, 'grant', ?)
+                        ON CONFLICT (user_id, purpose) DO NOTHING
+                        """,
+                        ("demo-user", p, DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_HASH, now_str_demo),
+                    )
         append_audit_event(
             connection=connection,
             user_id=user["id"],
@@ -1385,6 +1395,134 @@ def get_consents():
     return jsonify(results)
 
 
+@app.route("/api/consent/status", methods=["GET"])
+@app.route("/api/consents/status", methods=["GET"])
+def get_consent_status():
+    """
+    Returns verified status for a specific purpose or all purposes:
+    - User ID
+    - Purpose
+    - Notice version & hash
+    - Status ('active', 'withdrawn', 'denied', 'stale', 'missing')
+    - Re-consent requirement flag
+    - Creation & withdrawal timestamps
+    """
+    source = request.args.get("source", "user")
+    req_user = request.args.get("user_id")
+    purpose = request.args.get("purpose")
+
+    user_id, err = resolve_subject(req_user=req_user, source=source)
+    if err:
+        return err
+
+    active_ver, _, active_h = load_active_notice()
+
+    if purpose:
+        purpose_cfg = get_purpose_config(purpose)
+        if not purpose_cfg and purpose not in PURPOSES:
+            return jsonify({
+                "error": "Invalid purpose",
+                "reason_code": "INVALID_PURPOSE",
+                "valid_purposes": sorted(PURPOSES),
+            }), 400
+
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM consents WHERE user_id = ? AND purpose = ?",
+                (user_id, purpose),
+            ).fetchone()
+
+        if not row:
+            return jsonify({
+                "user_id": user_id,
+                "purpose": purpose,
+                "granted": False,
+                "status": "missing",
+                "needs_reconsent": False,
+                "notice_version": None,
+                "notice_hash": None,
+                "active_notice_version": active_ver,
+                "active_notice_hash": active_h,
+                "created_at": None,
+                "withdrawn_at": None,
+                "updated_at": None,
+            }), 200
+
+        r = dict(row)
+        granted = bool(r.get("granted"))
+        is_stale = bool(
+            granted
+            and (
+                r.get("notice_version") != active_ver
+                or (r.get("notice_hash") and active_h and r["notice_hash"] != active_h)
+            )
+        )
+        if not granted:
+            status = "withdrawn" if r.get("last_action") == "withdraw" else "denied"
+        elif is_stale:
+            status = "stale"
+        else:
+            status = "active"
+
+        return jsonify({
+            "user_id": user_id,
+            "purpose": purpose,
+            "granted": granted,
+            "status": status,
+            "needs_reconsent": is_stale,
+            "notice_version": r.get("notice_version"),
+            "notice_hash": r.get("notice_hash"),
+            "active_notice_version": active_ver,
+            "active_notice_hash": active_h,
+            "created_at": r.get("created_at"),
+            "withdrawn_at": r.get("withdrawn_at"),
+            "updated_at": r.get("updated_at"),
+        }), 200
+
+    # If no specific purpose requested, return status summary across all purposes
+    with get_connection() as connection:
+        rows = connection.execute(
+            "SELECT * FROM consents WHERE user_id = ? ORDER BY purpose",
+            (user_id,),
+        ).fetchall()
+
+    results = {}
+    for row in rows:
+        r = dict(row)
+        p = r["purpose"]
+        granted = bool(r.get("granted"))
+        is_stale = bool(
+            granted
+            and (
+                r.get("notice_version") != active_ver
+                or (r.get("notice_hash") and active_h and r["notice_hash"] != active_h)
+            )
+        )
+        if not granted:
+            status = "withdrawn" if r.get("last_action") == "withdraw" else "denied"
+        elif is_stale:
+            status = "stale"
+        else:
+            status = "active"
+        results[p] = {
+            "granted": granted,
+            "status": status,
+            "needs_reconsent": is_stale,
+            "notice_version": r.get("notice_version"),
+            "notice_hash": r.get("notice_hash"),
+            "created_at": r.get("created_at"),
+            "withdrawn_at": r.get("withdrawn_at"),
+            "updated_at": r.get("updated_at"),
+        }
+
+    return jsonify({
+        "user_id": user_id,
+        "active_notice_version": active_ver,
+        "active_notice_hash": active_h,
+        "consents": results,
+    }), 200
+
+
 @app.route("/api/consent/history", methods=["GET"])
 @app.route("/api/consents/history", methods=["GET"])
 def get_consents_history():
@@ -1496,7 +1634,7 @@ def record_consent():
 
     with get_connection() as connection:
         existing_row = connection.execute(
-            "SELECT granted, notice_version, notice_hash, last_action FROM consents WHERE user_id = ? AND purpose = ?",
+            "SELECT * FROM consents WHERE user_id = ? AND purpose = ?",
             (user_id, purpose),
         ).fetchone()
 
@@ -1509,6 +1647,9 @@ def record_consent():
                 "granted": False,
                 "notice_version": existing_row["notice_version"],
                 "notice_hash": existing_row["notice_hash"],
+                "created_at": existing_row["created_at"] if "created_at" in existing_row.keys() else None,
+                "withdrawn_at": existing_row["withdrawn_at"] if "withdrawn_at" in existing_row.keys() else None,
+                "updated_at": existing_row["updated_at"],
                 "reason_code": "CONSENT_ALREADY_WITHDRAWN",
                 "message": "Consent is already withdrawn (idempotent).",
                 "source": source,
@@ -1543,25 +1684,60 @@ def record_consent():
         granted = 1 if action == "grant" else 0
         if action == "grant":
             reason_code = "CONSENT_GRANTED"
+            created_at_val = (
+                existing_row["created_at"]
+                if existing_row and "created_at" in existing_row.keys() and existing_row["created_at"]
+                else now_str
+            )
+            withdrawn_at_val = None
         elif action == "withdraw":
             reason_code = "CONSENT_WITHDRAWN"
+            created_at_val = (
+                existing_row["created_at"]
+                if existing_row and "created_at" in existing_row.keys() and existing_row["created_at"]
+                else now_str
+            )
+            withdrawn_at_val = now_str
         else:
             reason_code = "CONSENT_DENIED"
+            created_at_val = (
+                existing_row["created_at"]
+                if existing_row and "created_at" in existing_row.keys() and existing_row["created_at"]
+                else now_str
+            )
+            withdrawn_at_val = now_str
 
-        connection.execute(
-            """
-            INSERT INTO consents
-                (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(user_id, purpose) DO UPDATE SET
-                granted = excluded.granted,
-                notice_version = excluded.notice_version,
-                notice_hash = excluded.notice_hash,
-                last_action = excluded.last_action,
-                updated_at = excluded.updated_at
-            """,
-            (user_id, purpose, granted, NOTICE_VERSION, NOTICE_HASH, action, now_str),
-        )
+        try:
+            connection.execute(
+                """
+                INSERT INTO consents
+                    (user_id, purpose, granted, notice_version, notice_hash, last_action, created_at, withdrawn_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, purpose) DO UPDATE SET
+                    granted = excluded.granted,
+                    notice_version = excluded.notice_version,
+                    notice_hash = excluded.notice_hash,
+                    last_action = excluded.last_action,
+                    withdrawn_at = excluded.withdrawn_at,
+                    updated_at = excluded.updated_at
+                """,
+                (user_id, purpose, granted, NOTICE_VERSION, NOTICE_HASH, action, created_at_val, withdrawn_at_val, now_str),
+            )
+        except Exception:
+            connection.execute(
+                """
+                INSERT INTO consents
+                    (user_id, purpose, granted, notice_version, notice_hash, last_action, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, purpose) DO UPDATE SET
+                    granted = excluded.granted,
+                    notice_version = excluded.notice_version,
+                    notice_hash = excluded.notice_hash,
+                    last_action = excluded.last_action,
+                    updated_at = excluded.updated_at
+                """,
+                (user_id, purpose, granted, NOTICE_VERSION, NOTICE_HASH, action, now_str),
+            )
 
         append_audit_event(
             connection=connection,
@@ -1583,6 +1759,9 @@ def record_consent():
         "granted": bool(granted),
         "notice_version": NOTICE_VERSION,
         "notice_hash": NOTICE_HASH,
+        "created_at": created_at_val,
+        "withdrawn_at": withdrawn_at_val,
+        "updated_at": now_str,
         "reason_code": reason_code,
         "source": source,
     }), 201
