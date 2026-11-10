@@ -130,56 +130,106 @@ class PostgresConnectionWrapper:
         self._conn.close()
 
 
+_pg_pool = []
+_pg_pool_lock = threading.Lock()
+_MAX_PG_POOL = 5
+
+_active_notice_cache = None
+_active_notice_cache_time = 0.0
+_active_notice_cache_path = None
+_notice_cache_lock = threading.Lock()
+
+
+def invalidate_active_notice_cache():
+    global _active_notice_cache, _active_notice_cache_time, _active_notice_cache_path
+    with _notice_cache_lock:
+        _active_notice_cache = None
+        _active_notice_cache_time = 0.0
+        _active_notice_cache_path = None
+
+
+def _create_pg_raw_conn(target_url):
+    import pg8000.dbapi
+
+    parsed = urllib.parse.urlparse(target_url)
+    user = urllib.parse.unquote(parsed.username or "")
+    password = urllib.parse.unquote(parsed.password or "")
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5432
+    database_name = (parsed.path or "/").lstrip("/") or "postgres"
+
+    ssl_ctx = None
+    if "sslmode=require" in target_url.lower() or parsed.hostname not in ("localhost", "127.0.0.1"):
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = False
+        ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    raw_conn = None
+    last_err = None
+    for attempt in range(3):
+        try:
+            raw_conn = pg8000.dbapi.connect(
+                user=user,
+                password=password,
+                host=host,
+                port=port,
+                database=database_name,
+                ssl_context=ssl_ctx,
+                timeout=15,
+            )
+            break
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(0.1 * (attempt + 1))
+
+    if raw_conn is None:
+        raise last_err
+    return raw_conn
+
+
 @contextmanager
 def get_connection():
     target_url = get_database_url()
     if target_url.startswith("postgres://") or target_url.startswith("postgresql://"):
-        import pg8000.dbapi
-
-        parsed = urllib.parse.urlparse(target_url)
-        user = urllib.parse.unquote(parsed.username or "")
-        password = urllib.parse.unquote(parsed.password or "")
-        host = parsed.hostname or "localhost"
-        port = parsed.port or 5432
-        database_name = (parsed.path or "/").lstrip("/") or "postgres"
-
-        ssl_ctx = None
-        if "sslmode=require" in target_url.lower() or parsed.hostname not in ("localhost", "127.0.0.1"):
-            ssl_ctx = ssl.create_default_context()
-            ssl_ctx.check_hostname = False
-            ssl_ctx.verify_mode = ssl.CERT_NONE
-
         raw_conn = None
-        last_err = None
-        for attempt in range(3):
-            try:
-                raw_conn = pg8000.dbapi.connect(
-                    user=user,
-                    password=password,
-                    host=host,
-                    port=port,
-                    database=database_name,
-                    ssl_context=ssl_ctx,
-                    timeout=15,
-                )
-                break
-            except Exception as e:
-                last_err = e
-                if attempt < 2:
-                    time.sleep(0.3 * (attempt + 1))
+        with _pg_pool_lock:
+            while _pg_pool:
+                cand = _pg_pool.pop()
+                try:
+                    c = cand.cursor()
+                    c.execute("SELECT 1")
+                    c.fetchone()
+                    raw_conn = cand
+                    break
+                except Exception:
+                    try:
+                        cand.close()
+                    except Exception:
+                        pass
 
         if raw_conn is None:
-            raise last_err
+            raw_conn = _create_pg_raw_conn(target_url)
 
         wrapper = PostgresConnectionWrapper(raw_conn)
         try:
             yield wrapper
             wrapper.commit()
+            with _pg_pool_lock:
+                if len(_pg_pool) < _MAX_PG_POOL:
+                    _pg_pool.append(raw_conn)
+                else:
+                    try:
+                        raw_conn.close()
+                    except Exception:
+                        pass
         except Exception:
             wrapper.rollback()
+            try:
+                raw_conn.close()
+            except Exception:
+                pass
             raise
-        finally:
-            wrapper.close()
     else:
         connection = sqlite3.connect(DATABASE_PATH, timeout=10.0)
         connection.row_factory = sqlite3.Row
@@ -765,13 +815,29 @@ def seed_purposes_and_consumers(connection):
 
 
 def get_active_notice_from_db():
+    global _active_notice_cache, _active_notice_cache_time, _active_notice_cache_path
+    now = time.time()
+    db_key = str(DATABASE_PATH)
+    with _notice_cache_lock:
+        if (
+            _active_notice_cache is not None
+            and _active_notice_cache_path == db_key
+            and (now - _active_notice_cache_time) < 30.0
+        ):
+            return _active_notice_cache
+
     with get_connection() as connection:
         try:
             row = connection.execute(
                 "SELECT version, text, hash FROM notice_versions WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
             ).fetchone()
             if row:
-                return row["version"], row["text"], row["hash"]
+                res = (row["version"], row["text"], row["hash"])
+                with _notice_cache_lock:
+                    _active_notice_cache = res
+                    _active_notice_cache_time = now
+                    _active_notice_cache_path = db_key
+                return res
         except Exception:
             pass
 
@@ -779,7 +845,12 @@ def get_active_notice_from_db():
             "SELECT version, text, hash FROM notice_versions ORDER BY id DESC LIMIT 1"
         ).fetchone()
         if row:
-            return row["version"], row["text"], row["hash"]
+            res = (row["version"], row["text"], row["hash"])
+            with _notice_cache_lock:
+                _active_notice_cache = res
+                _active_notice_cache_time = now
+                _active_notice_cache_path = db_key
+            return res
         return DEFAULT_NOTICE_VERSION, DEFAULT_NOTICE_TEXT, DEFAULT_NOTICE_HASH
 
 
@@ -869,6 +940,7 @@ def seed_demo_users(connection):
 
 
 def initialize_database():
+    invalidate_active_notice_cache()
     with get_connection() as connection:
         pg = is_postgres()
         id_primary = "id SERIAL PRIMARY KEY" if pg else "id INTEGER PRIMARY KEY AUTOINCREMENT"
@@ -1262,46 +1334,32 @@ def compute_dashboard_stats(connection, user_id=None):
         else:
             withdrawn_consents += 1
 
-    # Access request counts
+    # Access request counts (single optimized aggregation query)
     if user_id:
-        allowed_row = connection.execute(
+        agg = connection.execute(
             """
-            SELECT COUNT(*) as c FROM audit_events
-            WHERE user_id = ? AND action IN ('data_access_allowed', 'data_share_allowed')
+            SELECT
+                COUNT(*) as total_audit,
+                SUM(CASE WHEN action IN ('data_access_allowed', 'data_share_allowed') THEN 1 ELSE 0 END) as allowed_count,
+                SUM(CASE WHEN action IN ('data_access_denied', 'data_share_denied') THEN 1 ELSE 0 END) as blocked_count
+            FROM audit_events WHERE user_id = ?
             """,
-            (str(user_id),),
-        ).fetchone()
-        blocked_row = connection.execute(
-            """
-            SELECT COUNT(*) as c FROM audit_events
-            WHERE user_id = ? AND action IN ('data_access_denied', 'data_share_denied')
-            """,
-            (str(user_id),),
-        ).fetchone()
-        total_audit_row = connection.execute(
-            "SELECT COUNT(*) as c FROM audit_events WHERE user_id = ?",
             (str(user_id),),
         ).fetchone()
     else:
-        allowed_row = connection.execute(
+        agg = connection.execute(
             """
-            SELECT COUNT(*) as c FROM audit_events
-            WHERE action IN ('data_access_allowed', 'data_share_allowed')
+            SELECT
+                COUNT(*) as total_audit,
+                SUM(CASE WHEN action IN ('data_access_allowed', 'data_share_allowed') THEN 1 ELSE 0 END) as allowed_count,
+                SUM(CASE WHEN action IN ('data_access_denied', 'data_share_denied') THEN 1 ELSE 0 END) as blocked_count
+            FROM audit_events
             """
-        ).fetchone()
-        blocked_row = connection.execute(
-            """
-            SELECT COUNT(*) as c FROM audit_events
-            WHERE action IN ('data_access_denied', 'data_share_denied')
-            """
-        ).fetchone()
-        total_audit_row = connection.execute(
-            "SELECT COUNT(*) as c FROM audit_events"
         ).fetchone()
 
-    allowed_requests = int(allowed_row["c"]) if allowed_row and allowed_row["c"] is not None else 0
-    blocked_requests = int(blocked_row["c"]) if blocked_row and blocked_row["c"] is not None else 0
-    total_audit_events = int(total_audit_row["c"]) if total_audit_row and total_audit_row["c"] is not None else 0
+    allowed_requests = int(agg["allowed_count"] or 0) if agg and agg["allowed_count"] is not None else 0
+    blocked_requests = int(agg["blocked_count"] or 0) if agg and agg["blocked_count"] is not None else 0
+    total_audit_events = int(agg["total_audit"] or 0) if agg and agg["total_audit"] is not None else 0
 
     return {
         "active_consents": active_consents,

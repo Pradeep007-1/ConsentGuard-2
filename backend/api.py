@@ -30,6 +30,7 @@ from database import (
     get_data_access_request_logs,
     hash_api_key,
     initialize_database,
+    invalidate_active_notice_cache,
     is_local_mode,
     verify_audit_chain,
 )
@@ -1514,6 +1515,7 @@ def update_notice():
         NOTICE_VERSION = new_version
         NOTICE_TEXT = new_text
         NOTICE_HASH = new_hash
+        invalidate_active_notice_cache()
 
         auth_user = get_authenticated_user(connection)
         actor_id = auth_user["id"] if auth_user else "admin"
@@ -1553,6 +1555,7 @@ def reset_notice():
     NOTICE_VERSION = DEFAULT_NOTICE_VERSION
     NOTICE_TEXT = DEFAULT_NOTICE_TEXT
     NOTICE_HASH = DEFAULT_NOTICE_HASH
+    invalidate_active_notice_cache()
 
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
@@ -1993,6 +1996,9 @@ def record_consent():
         "granted": bool(granted),
         "notice_version": NOTICE_VERSION,
         "notice_hash": NOTICE_HASH,
+        "active_notice_version": NOTICE_VERSION,
+        "active_notice_hash": NOTICE_HASH,
+        "needs_reconsent": False,
         "created_at": created_at_val,
         "withdrawn_at": withdrawn_at_val,
         "updated_at": now_str,
@@ -2665,6 +2671,7 @@ def reset_demo():
     NOTICE_VERSION = DEFAULT_NOTICE_VERSION
     NOTICE_TEXT = DEFAULT_NOTICE_TEXT
     NOTICE_HASH = DEFAULT_NOTICE_HASH
+    invalidate_active_notice_cache()
 
     auth_user = get_authenticated_user()
     data = get_request_json()

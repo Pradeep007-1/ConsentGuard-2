@@ -2702,7 +2702,16 @@ function consentFor(purpose) {
 
 // Render Purposes & Dashboard Summaries
 function renderPurposes() {
-  const currentNoticeVer = state.notice?.notice_version || (state.consents && state.consents[0]?.active_notice_version) || localStorage.getItem('cg_notice_ver') || '1.0';
+  const serverActiveVer = (state.consents && state.consents.find(c => c.active_notice_version)?.active_notice_version) || state.notice?.notice_version || '1.0';
+  const serverActiveHash = (state.consents && state.consents.find(c => c.active_notice_hash)?.active_notice_hash) || state.notice?.notice_hash || '';
+
+  if (state.notice && serverActiveVer && state.notice.notice_version !== serverActiveVer) {
+    state.notice.notice_version = serverActiveVer;
+    state.notice.notice_hash = serverActiveHash;
+    updateNoticeDom();
+  }
+
+  const currentNoticeVer = serverActiveVer;
   const displayUser = state.currentUserObj ? (state.currentUserObj.name || state.currentUserObj.id) : (state.currentUser || 'User');
 
   document.querySelectorAll('.active-user-label').forEach(el => {
@@ -2733,7 +2742,7 @@ function renderPurposes() {
       } catch(e) {}
     }
 
-    const noticeHashMismatch = consent?.notice_hash && state.notice?.notice_hash && consent.notice_hash !== state.notice.notice_hash;
+    const noticeHashMismatch = consent?.notice_hash && serverActiveHash && consent.notice_hash !== serverActiveHash;
     const isOutdated = consent && (consent.needs_reconsent === true || (Number(consent.granted) === 1 && (consent.notice_version !== currentNoticeVer || noticeHashMismatch)));
 
     if (isOutdated) {
@@ -3130,20 +3139,20 @@ async function refreshAll(retryCount = 0, options = {}) {
     const fetches = [
       requestJson('/consents'),
       requestJson('/audit?limit=100'),
-      requestJson('/stats').catch(() => ({ data: null }))
+      requestJson('/stats').catch(() => ({ data: null })),
+      requestJson('/notice').catch(() => ({ data: null }))
     ];
 
-    // Only fetch notice definitions if not yet cached or explicitly requested
-    const needsNotices = !state.notice || options.includeNotices;
-    if (needsNotices) {
-      fetches.push(requestJson('/notice'));
-      fetches.push(requestJson('/notices'));
+    if (!state.notices || options.includeNotices) {
+      fetches.push(requestJson('/notices').catch(() => ({ data: null })));
     }
 
     const results = await Promise.all(fetches);
     const consentsRes = results[0];
     const auditRes = results[1];
     const statsRes = results[2];
+    const noticeRes = results[3];
+    const noticesRes = results[4];
 
     state.consents = consentsRes.data || [];
     state.audit = auditRes.data || [];
@@ -3151,7 +3160,10 @@ async function refreshAll(retryCount = 0, options = {}) {
       state.stats = statsRes.data;
     }
 
-    if (state.consents.length > 0 && state.consents[0].active_notice_version && !state.notice) {
+    if (noticeRes && noticeRes.data) {
+      state.notice = noticeRes.data;
+      updateNoticeDom();
+    } else if (state.consents.length > 0 && state.consents[0].active_notice_version) {
       state.notice = {
         notice_version: state.consents[0].active_notice_version,
         notice_hash: state.consents[0].active_notice_hash || ''
@@ -3159,17 +3171,9 @@ async function refreshAll(retryCount = 0, options = {}) {
       updateNoticeDom();
     }
 
-    if (needsNotices && results.length >= 5) {
-      const noticeRes = results[3];
-      const noticesRes = results[4];
-      if (noticeRes && noticeRes.data) {
-        state.notice = noticeRes.data;
-        updateNoticeDom();
-      }
-      if (noticesRes && noticesRes.data) {
-        state.notices = noticesRes.data;
-        loadNoticeHistory();
-      }
+    if (noticesRes && noticesRes.data) {
+      state.notices = noticesRes.data;
+      loadNoticeHistory();
     }
 
     renderPurposes();
@@ -3209,8 +3213,8 @@ async function setConsent(purpose, action) {
   // Snapshot for instant rollback on error
   const prevConsents = JSON.parse(JSON.stringify(state.consents));
   const currentUid = state.currentUserObj ? state.currentUserObj.id : (state.currentUser || 'demo-user');
-  const activeVer = state.notice?.notice_version || '2.0';
-  const activeHash = state.notice?.notice_hash || '';
+  const activeVer = (state.consents && state.consents.find(c => c.active_notice_version)?.active_notice_version) || state.notice?.notice_version || '1.0';
+  const activeHash = (state.consents && state.consents.find(c => c.active_notice_hash)?.active_notice_hash) || state.notice?.notice_hash || '';
 
   // 1. Instant Optimistic UI Update (<1ms, no freezing)
   let target = state.consents.find(c => (c.user_id === currentUid || c.user_id === state.currentUser) && c.purpose === purpose);
@@ -3238,6 +3242,14 @@ async function setConsent(purpose, action) {
     if (response.status === 201) {
       if (data) {
         Object.assign(target, data);
+        if (data.active_notice_version || data.notice_version) {
+          const v = data.active_notice_version || data.notice_version;
+          const h = data.active_notice_hash || data.notice_hash || '';
+          if (!state.notice) state.notice = {};
+          state.notice.notice_version = v;
+          state.notice.notice_hash = h;
+          updateNoticeDom();
+        }
         target.needs_reconsent = false;
         renderPurposes();
       }
