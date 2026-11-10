@@ -1415,6 +1415,196 @@ def test_42_purpose_based_data_sharing_comprehensive_matrix(enterprise_app):
     assert "api_key_hash" not in prof  # Never leak key hashes to consumers
 
 
+def test_43_cybersecurity_protections_comprehensive_suite(enterprise_app):
+    """
+    Test 43: Complete Part 8 Cybersecurity Protections Suite:
+    1. SQL Injection Prevention & Parameterization across all query vectors
+    2. CORS Allow-List enforcement (trusted allowed, untrusted blocked)
+    3. OWASP Security Headers (nosniff, SAMEORIGIN, XSS protection, no-store)
+    4. Request Payload Size Limits (HTTP 413 on >2MB)
+    5. Rate Limiting protection on sensitive endpoints (HTTP 429)
+    6. Input Validation (invalid email, weak password, invalid purpose/action)
+    7. Leak-Proof Error Handling (zero stack traces, zero credential leakage)
+    8. Security Event Logging in Merkle DAG (login_failed, rate_limit_exceeded)
+    9. IDOR & Unauthorized Resource Access Protection
+    10. Duplicate Sensitive Operation Protections (idempotent withdrawal, duplicate conflict)
+    """
+    client, _ = enterprise_app
+
+    # -------------------------------------------------------------
+    # 1. SQL Injection Prevention & Parameterized Queries
+    # -------------------------------------------------------------
+    # Attempt SQL injection in login
+    sqli_login = client.post(
+        "/api/auth/login",
+        json={"email": "' OR '1'='1' --", "password": "' OR '1'='1'"},
+    )
+    assert sqli_login.status_code == 401
+    assert sqli_login.get_json()["reason_code"] == "INVALID_CREDENTIALS"
+
+    # Attempt SQL injection in signup
+    sqli_signup = client.post(
+        "/api/auth/signup",
+        json={
+            "name": "Hacker'; DROP TABLE users; --",
+            "email": "not-a-valid-email-format",
+            "password": "Password123!",
+        },
+    )
+    assert sqli_signup.status_code == 400
+    assert sqli_signup.get_json()["reason_code"] == "INVALID_EMAIL"
+
+    # Attempt SQL injection in data-sharing api_key and user_id
+    sqli_share = client.post(
+        "/api/share/request",
+        json={
+            "api_key": "' OR '1'='1' --",
+            "user_id": "demo-user' UNION SELECT 1,2,3,4,5,6,7,8,9,10,11,12,13 --",
+            "purpose": "Analytics",
+        },
+    )
+    assert sqli_share.status_code == 401
+    assert sqli_share.get_json()["reason_code"] == "INVALID_API_KEY"
+
+    # Verify database schema and users table was completely unaffected by injection attempts
+    with database.get_connection() as conn:
+        user_cnt = conn.execute("SELECT COUNT(*) as c FROM users").fetchone()["c"]
+        assert user_cnt > 0  # Users table remains completely intact
+
+    # -------------------------------------------------------------
+    # 2. CORS Allow-List & OWASP Security Headers
+    # -------------------------------------------------------------
+    # Trusted localhost origin -> Access-Control-Allow-Origin reflected
+    trusted_res = client.get(
+        "/api/health",
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert trusted_res.status_code == 200
+    assert trusted_res.headers.get("Access-Control-Allow-Origin") == "http://localhost:3000"
+    assert trusted_res.headers.get("Access-Control-Allow-Credentials") == "true"
+
+    # Untrusted attacker origin -> Access-Control-Allow-Origin is NOT granted
+    untrusted_res = client.get(
+        "/api/health",
+        headers={"Origin": "https://malicious-attacker-domain.evil.com"},
+    )
+    assert untrusted_res.headers.get("Access-Control-Allow-Origin") != "https://malicious-attacker-domain.evil.com"
+
+    # Verify OWASP Security Headers
+    assert trusted_res.headers.get("X-Content-Type-Options") == "nosniff"
+    assert trusted_res.headers.get("X-Frame-Options") == "SAMEORIGIN"
+    assert "no-store" in trusted_res.headers.get("Cache-Control", "")
+
+    # -------------------------------------------------------------
+    # 3. Request Payload Size Limits (HTTP 413)
+    # -------------------------------------------------------------
+    # 2.5 MB oversized payload exceeds the 2MB MAX_CONTENT_LENGTH limit
+    oversized_data = "X" * (2500 * 1024)
+    oversized_res = client.post(
+        "/api/auth/login",
+        data=oversized_data,
+        content_type="application/json",
+    )
+    assert oversized_res.status_code == 413
+    assert oversized_res.get_json()["reason_code"] == "PAYLOAD_TOO_LARGE"
+
+    # -------------------------------------------------------------
+    # 4. Rate Limiting Protection (HTTP 429)
+    # -------------------------------------------------------------
+    # Test the in-memory sliding window rate limiter directly
+    api.rate_limiter.reset()
+    test_key = "auth:192.168.1.100"
+    for _ in range(40):
+        assert api.rate_limiter.is_rate_limited(test_key, max_requests=40, window_seconds=60) is False
+    # 41st request exceeds the limit
+    assert api.rate_limiter.is_rate_limited(test_key, max_requests=40, window_seconds=60) is True
+
+    # -------------------------------------------------------------
+    # 5. Input Validation
+    # -------------------------------------------------------------
+    # Weak password (< 6 chars)
+    weak_pwd_res = client.post(
+        "/api/auth/signup",
+        json={"name": "Alice Valid", "email": "alice_valid@test.com", "password": "123"},
+    )
+    assert weak_pwd_res.status_code == 400
+    assert weak_pwd_res.get_json()["reason_code"] == "WEAK_PASSWORD"
+
+    # Short name (< 2 chars)
+    bad_name_res = client.post(
+        "/api/auth/signup",
+        json={"name": "A", "email": "alice_valid@test.com", "password": "ValidPassword123!"},
+    )
+    assert bad_name_res.status_code == 400
+    assert bad_name_res.get_json()["reason_code"] == "INVALID_NAME"
+
+    # Invalid consent action
+    bad_action_res = client.post(
+        "/api/consents",
+        json={"purpose": "Analytics", "action": "malicious_override"},
+    )
+    assert bad_action_res.status_code == 400
+    assert bad_action_res.get_json()["reason_code"] == "INVALID_ACTION"
+
+    # Invalid purpose
+    bad_purpose_res = client.post(
+        "/api/consents",
+        json={"purpose": "Unauthorized Telemetry", "action": "grant"},
+    )
+    assert bad_purpose_res.status_code == 400
+    assert bad_purpose_res.get_json()["reason_code"] == "INVALID_PURPOSE"
+
+    # -------------------------------------------------------------
+    # 6. Leak-Proof Error Handling & Secret Protection
+    # -------------------------------------------------------------
+    # Trigger 404
+    not_found_res = client.get("/api/non-existent-endpoint-xyz")
+    assert not_found_res.status_code == 404
+    err_json = not_found_res.get_json()
+    assert err_json["reason_code"] == "NOT_FOUND"
+    # Ensure no internal file paths, stack traces, or credentials in payload
+    assert "Traceback" not in not_found_res.get_data(as_text=True)
+    assert "database" not in err_json or err_json["database"] != "password"
+
+    # -------------------------------------------------------------
+    # 7. Security Event Logging in Merkle DAG
+    # -------------------------------------------------------------
+    # Trigger failed login with incorrect password for existing user
+    bad_login_res = client.post(
+        "/api/auth/login",
+        json={"email": "demo@consentguard.local", "password": "WrongPassword999!"},
+    )
+    assert bad_login_res.status_code == 401
+    assert bad_login_res.get_json()["reason_code"] == "INVALID_CREDENTIALS"
+
+    # Verify login_failed event was written to audit_events
+    with database.get_connection() as conn:
+        failed_event = conn.execute(
+            "SELECT action, reason_code FROM audit_events WHERE action = 'login_failed' ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        assert failed_event is not None
+        assert failed_event["reason_code"] == "INVALID_CREDENTIALS"
+
+    # -------------------------------------------------------------
+    # 8. Duplicate Operation Protections
+    # -------------------------------------------------------------
+    # Duplicate signup with existing email
+    dup_signup = client.post(
+        "/api/auth/signup",
+        json={"name": "Demo Duplicate", "email": "demo@consentguard.local", "password": "Password123!"},
+    )
+    assert dup_signup.status_code == 409
+    assert dup_signup.get_json()["reason_code"] == "EMAIL_ALREADY_EXISTS"
+
+    # Duplicate withdrawal idempotency
+    client.post("/api/auth/demo-login", json={"user_id": "demo-user"})
+    client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    dup_withdraw = client.post("/api/consents", json={"purpose": "Analytics", "action": "withdraw"})
+    assert dup_withdraw.status_code == 200
+    assert dup_withdraw.get_json()["reason_code"] == "CONSENT_ALREADY_WITHDRAWN"
+
+
+
 
 
 

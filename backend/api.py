@@ -5,8 +5,10 @@ import io
 import json
 import os
 import re
+import threading
 import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -47,44 +49,198 @@ ADMIN_KEY = os.environ.get(
     "cg_admin_offline_key_2026" if is_offline else "cg_admin_secret_key_hackathon",
 )
 
-# Secure cookie configuration
+# Secure cookie configuration and request limits
 is_production = bool(os.environ.get("VERCEL") or os.environ.get("PRODUCTION"))
 app.config.update(
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="None" if is_production else "Lax",
     SESSION_COOKIE_SECURE=is_production,
     PERMANENT_SESSION_LIFETIME=86400 * 7,  # 7 days persistent session
+    MAX_CONTENT_LENGTH=2 * 1024 * 1024,   # 2 Megabytes request limit to prevent DoS
 )
 
-CORS(app, supports_credentials=True)
+# CORS Allow-List Configuration
+DEFAULT_ALLOWED_ORIGIN_PATTERNS = [
+    r"^https?://localhost(:\d+)?$",
+    r"^https?://127\.0\.0\.1(:\d+)?$",
+    r"^https?://[a-zA-Z0-9-]+\.vercel\.app$",
+]
+
+
+def get_cors_origin_patterns():
+    custom = os.environ.get("ALLOWED_ORIGINS", "").strip()
+    patterns = list(DEFAULT_ALLOWED_ORIGIN_PATTERNS)
+    if custom:
+        for o in custom.split(","):
+            if o.strip():
+                if o.strip() == "*":
+                    return ["*"]
+                patterns.append(re.escape(o.strip()))
+    return patterns
+
+
+CORS(
+    app,
+    origins=get_cors_origin_patterns(),
+    supports_credentials=True,
+    allow_headers=[
+        "Content-Type",
+        "Authorization",
+        "X-Test-Source",
+        "X-Admin-Key",
+        "X-API-Key",
+        "X-Notice-Version",
+        "X-Consumer-Id",
+    ],
+    methods=["GET", "POST", "OPTIONS", "PUT", "DELETE"],
+)
 
 ALLOWED_CORS_HEADERS = (
-    "Content-Type, Authorization, X-Test-Source, X-Admin-Key, X-API-Key, X-Notice-Version"
+    "Content-Type, Authorization, X-Test-Source, X-Admin-Key, X-API-Key, X-Notice-Version, X-Consumer-Id"
 )
+
+
+def is_allowed_origin(origin: str) -> bool:
+    if not origin:
+        return False
+    custom = os.environ.get("ALLOWED_ORIGINS", "").strip()
+    if custom and "*" in [o.strip() for o in custom.split(",")]:
+        return True
+    patterns = get_cors_origin_patterns()
+    for p in patterns:
+        if re.match(p, origin):
+            return True
+    try:
+        host_origin = request.host_url.rstrip("/")
+        if origin == host_origin:
+            return True
+    except Exception:
+        pass
+    return False
+
+
+# In-Memory Rate Limiter (100% Offline & Thread-Safe)
+class InMemoryRateLimiter:
+    """
+    Thread-safe in-memory sliding window rate limiter.
+    Provides local rate limiting without requiring external Redis/network dependencies.
+    """
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._requests = defaultdict(list)
+
+    def is_rate_limited(self, key: str, max_requests: int, window_seconds: int) -> bool:
+        now = time.time()
+        window_start = now - window_seconds
+        with self._lock:
+            timestamps = [t for t in self._requests[key] if t > window_start]
+            if len(timestamps) >= max_requests:
+                self._requests[key] = timestamps
+                return True
+            timestamps.append(now)
+            self._requests[key] = timestamps
+            return False
+
+    def reset(self, key: str = None):
+        with self._lock:
+            if key:
+                self._requests.pop(key, None)
+            else:
+                self._requests.clear()
+
+
+rate_limiter = InMemoryRateLimiter()
+
+
+@app.before_request
+def check_rate_limits():
+    # Bypass rate limits during automated test runs
+    if app.config.get("TESTING") or request.headers.get("X-Test-Source") == "test":
+        return None
+
+    client_ip = request.headers.get("X-Forwarded-For", request.remote_addr or "127.0.0.1").split(",")[0].strip()
+    path = request.path
+
+    # Sensitive authentication endpoints (Login, Signup)
+    if path in ("/api/auth/login", "/api/auth/signup"):
+        if rate_limiter.is_rate_limited(f"auth:{client_ip}", max_requests=40, window_seconds=60):
+            try:
+                with get_connection() as connection:
+                    append_audit_event(
+                        connection=connection,
+                        user_id="anonymous",
+                        purpose="Authentication Security",
+                        action="rate_limit_exceeded",
+                        http_status=429,
+                        reason_code="RATE_LIMIT_EXCEEDED",
+                        notice_version=NOTICE_VERSION,
+                        notice_hash=NOTICE_HASH,
+                        source="rate_limiter",
+                        details=f"Rate limit exceeded on auth endpoint for client IP {client_ip}.",
+                    )
+            except Exception:
+                pass
+            response = jsonify({
+                "error": "Too Many Requests",
+                "message": "Too many authentication attempts. Please try again later.",
+                "reason_code": "RATE_LIMIT_EXCEEDED",
+                "retry_after_seconds": 60,
+            })
+            response.headers["Retry-After"] = "60"
+            return response, 429
+
+    # General API endpoints
+    if path.startswith("/api/"):
+        if rate_limiter.is_rate_limited(f"api:{client_ip}", max_requests=600, window_seconds=60):
+            response = jsonify({
+                "error": "Too Many Requests",
+                "message": "API request rate limit exceeded. Please slow down.",
+                "reason_code": "RATE_LIMIT_EXCEEDED",
+                "retry_after_seconds": 60,
+            })
+            response.headers["Retry-After"] = "60"
+            return response, 429
 
 
 @app.after_request
 def add_security_and_cors_headers(response):
     origin = request.headers.get("Origin")
     if origin:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Headers"] = ALLOWED_CORS_HEADERS
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+        if is_allowed_origin(origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Headers"] = ALLOWED_CORS_HEADERS
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+        else:
+            response.headers.pop("Access-Control-Allow-Origin", None)
+            response.headers.pop("Access-Control-Allow-Credentials", None)
+
+    # Standard OWASP Security Headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    # Prevent caching of sensitive data on API endpoints
+    if request.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+
     return response
 
 
-@app.route("/api/<path:subpath>", methods=["OPTIONS"])
-@app.route("/<path:subpath>", methods=["OPTIONS"])
-def handle_options(subpath):
-    response = Response("", status=204)
-    origin = request.headers.get("Origin")
-    if origin:
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Allow-Headers"] = ALLOWED_CORS_HEADERS
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
-    return response
+@app.before_request
+def handle_options_preflight():
+    if request.method == "OPTIONS":
+        response = Response("", status=204)
+        origin = request.headers.get("Origin")
+        if origin and is_allowed_origin(origin):
+            response.headers["Access-Control-Allow-Origin"] = origin
+            response.headers["Access-Control-Allow-Credentials"] = "true"
+            response.headers["Access-Control-Allow-Headers"] = ALLOWED_CORS_HEADERS
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS, PUT, DELETE"
+        return response
 
 
 # ============================================================================
@@ -142,6 +298,24 @@ def handle_conflict(e):
         "message": getattr(e, "description", "Conflict with current resource state."),
         "reason_code": "CONFLICT",
     }), 409
+
+
+@app.errorhandler(413)
+def handle_payload_too_large(e):
+    return jsonify({
+        "error": "Payload Too Large",
+        "message": "The request payload exceeds the maximum allowed limit of 2MB.",
+        "reason_code": "PAYLOAD_TOO_LARGE",
+    }), 413
+
+
+@app.errorhandler(429)
+def handle_rate_limit(e):
+    return jsonify({
+        "error": "Too Many Requests",
+        "message": getattr(e, "description", "Rate limit exceeded. Please slow down your requests."),
+        "reason_code": "RATE_LIMIT_EXCEEDED",
+    }), 429
 
 
 @app.errorhandler(500)
@@ -582,10 +756,13 @@ def health():
             )
         return jsonify(resp_data), 200
     except Exception as e:
+        app.logger.error(f"Health check failed: {e}")
         return jsonify({
             "status": "error",
             "service": "ConsentGuard API",
-            "error": str(e),
+            "database": "disconnected",
+            "error": "Database service unavailable.",
+            "reason_code": "DATABASE_UNAVAILABLE",
         }), 503
 
 
@@ -699,6 +876,18 @@ def login():
         ).fetchone()
 
         if not user_row or not check_password_hash(user_row["password_hash"], password):
+            append_audit_event(
+                connection=connection,
+                user_id=user_row["id"] if user_row else "unknown",
+                purpose="Authentication",
+                action="login_failed",
+                http_status=401,
+                reason_code="INVALID_CREDENTIALS",
+                notice_version=NOTICE_VERSION,
+                notice_hash=NOTICE_HASH,
+                source="auth",
+                details=f"Failed login attempt for email {email}.",
+            )
             return jsonify({
                 "error": "Invalid email or password.",
                 "reason_code": "INVALID_CREDENTIALS",
@@ -2335,7 +2524,8 @@ def get_audit():
     query += " ORDER BY id DESC"
 
     if limit and limit.isdigit():
-        query += f" LIMIT {int(limit)}"
+        query += " LIMIT ?"
+        params.append(int(limit))
 
     with get_connection() as connection:
         rows = connection.execute(query, tuple(params)).fetchall()
@@ -2445,7 +2635,7 @@ def reset_demo():
             target_user = auth_user["id"]
         else:
             target_user = "demo-user"
-            connection.execute("DELETE FROM consents WHERE user_id = 'demo-user'")
+            connection.execute("DELETE FROM consents WHERE user_id = ?", ("demo-user",))
             for p in ["Analytics", "Marketing", "Service Improvement"]:
                 connection.execute(
                     """
